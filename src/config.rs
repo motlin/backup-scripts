@@ -17,6 +17,7 @@ pub struct AppConfig {
     pub clean_tmp: CleanTmpConfig,
     pub clean_xcode: CleanXcodeConfig,
     pub clean_docker: CleanDockerConfig,
+    pub clean_brew: CleanBrewConfig,
     pub bz_cleanup: BzCleanupConfig,
     pub all: AllConfig,
 }
@@ -122,6 +123,13 @@ pub struct CleanDockerConfig {
     pub hours: Option<u32>,
     /// Prune scope. Currently only "system" is supported.
     pub scope: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanBrewConfig {
+    /// Value passed to `brew cleanup --prune=<value>`. Default: "all".
+    pub prune: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]

@@ -52,6 +52,9 @@ enum Command {
 
     /// Prune unused Docker images, containers, volumes, build cache, and networks.
     CleanDocker(commands::clean_docker::Args),
+
+    /// Run `brew cleanup` to remove old formula/cask versions and prune the download cache.
+    CleanBrew(commands::clean_brew::Args),
 }
 
 #[tokio::main]
@@ -101,6 +104,9 @@ async fn main() -> Result<()> {
         }
         Command::CleanDocker(args) => {
             commands::clean_docker::run(args, &cfg.clean_docker, cli.dry_run).await
+        }
+        Command::CleanBrew(args) => {
+            commands::clean_brew::run(args, &cfg.clean_brew, cli.dry_run).await
         }
     }
 }
