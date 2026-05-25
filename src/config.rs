@@ -15,6 +15,7 @@ pub struct AppConfig {
     pub clean_m2: CleanM2Config,
     pub clean_gradle: CleanGradleConfig,
     pub clean_tmp: CleanTmpConfig,
+    pub clean_docker: CleanDockerConfig,
     pub bz_cleanup: BzCleanupConfig,
     pub all: AllConfig,
 }
@@ -103,6 +104,15 @@ pub struct CleanTmpConfig {
     pub roots: Option<Vec<PathBuf>>,
     pub days: Option<u32>,
     pub concurrency: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanDockerConfig {
+    /// Only prune objects older than this many hours. Default: 720 (30 days).
+    pub hours: Option<u32>,
+    /// Prune scope. Currently only "system" is supported.
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]

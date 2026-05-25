@@ -1,6 +1,7 @@
 pub mod all;
 pub mod bz_cleanup;
 pub mod clean_cargo;
+pub mod clean_docker;
 pub mod clean_gradle;
 pub mod clean_m2;
 pub mod clean_maven;

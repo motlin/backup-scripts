@@ -46,6 +46,9 @@ enum Command {
 
     /// Delete old files and directories from /tmp and other temp locations.
     CleanTmp(commands::clean_tmp::Args),
+
+    /// Prune unused Docker images, containers, volumes, build cache, and networks.
+    CleanDocker(commands::clean_docker::Args),
 }
 
 #[tokio::main]
@@ -89,6 +92,9 @@ async fn main() -> Result<()> {
         }
         Command::CleanTmp(args) => {
             commands::clean_tmp::run(args, &cfg.clean_tmp, cli.dry_run).await
+        }
+        Command::CleanDocker(args) => {
+            commands::clean_docker::run(args, &cfg.clean_docker, cli.dry_run).await
         }
     }
 }
