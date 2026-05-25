@@ -1,0 +1,19 @@
+# Allow `craig` to run the Backblaze cleanup helper without a password so
+# `backup bz-cleanup` works from cron / launchd without a TTY.
+#
+# Install:
+#   sudo install -m 0755 -o root -g wheel scripts/backup-bz-cleanup-helper.sh /usr/local/bin/backup-bz-cleanup-helper
+#   sudo install -m 0440 -o root -g wheel scripts/backup.sudoers /etc/sudoers.d/backup
+#   sudo visudo -c -f /etc/sudoers.d/backup
+#
+# Last command must print `parsed OK`. If not, remove the file before logging
+# out — a broken sudoers entry locks out sudo until corrected as root.
+#
+# The helper validates its own arguments and only ever runs:
+#   find /Library/Backblaze.bzpkg/bzdata/bzbackup/bzdatacenter -maxdepth 1 \
+#     -name <pattern> -mtime +<days> -exec stat -f %z {} +     (scan)
+#   find /Library/Backblaze.bzpkg/bzdata/bzbackup/bzdatacenter -maxdepth 1 \
+#     -name <pattern> -mtime +<days> -delete                    (delete)
+# So this rule does not let the user run arbitrary commands as root.
+
+craig ALL=(root) NOPASSWD: /usr/local/bin/backup-bz-cleanup-helper *
