@@ -18,6 +18,7 @@ pub struct AppConfig {
     pub clean_xcode: CleanXcodeConfig,
     pub clean_docker: CleanDockerConfig,
     pub clean_brew: CleanBrewConfig,
+    pub clean_npm: CleanNpmConfig,
     pub bz_cleanup: BzCleanupConfig,
     pub all: AllConfig,
 }
@@ -130,6 +131,15 @@ pub struct CleanDockerConfig {
 pub struct CleanBrewConfig {
     /// Value passed to `brew cleanup --prune=<value>`. Default: "all".
     pub prune: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanNpmConfig {
+    /// Path to the npm cacache directory. Default: ~/.npm/_cacache.
+    pub cache_dir: Option<PathBuf>,
+    pub days: Option<u32>,
+    pub concurrency: Option<usize>,
 }
 
 #[derive(Debug, Default, Deserialize)]

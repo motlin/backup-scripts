@@ -55,6 +55,9 @@ enum Command {
 
     /// Run `brew cleanup` to remove old formula/cask versions and prune the download cache.
     CleanBrew(commands::clean_brew::Args),
+
+    /// Delete stale entries from the npm cacache directory (~/.npm/_cacache).
+    CleanNpm(commands::clean_npm::Args),
 }
 
 #[tokio::main]
@@ -107,6 +110,9 @@ async fn main() -> Result<()> {
         }
         Command::CleanBrew(args) => {
             commands::clean_brew::run(args, &cfg.clean_brew, cli.dry_run).await
+        }
+        Command::CleanNpm(args) => {
+            commands::clean_npm::run(args, &cfg.clean_npm, cli.dry_run).await
         }
     }
 }

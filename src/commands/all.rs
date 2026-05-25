@@ -5,7 +5,7 @@ use crate::config::AppConfig;
 
 use super::{
     bz_cleanup, clean_brew, clean_cargo, clean_docker, clean_gradle, clean_m2, clean_maven,
-    clean_node, clean_tmp, clean_xcode, git_maintenance,
+    clean_node, clean_npm, clean_tmp, clean_xcode, git_maintenance,
 };
 
 pub const DEFAULT_STEPS: &[&str] = &[
@@ -19,6 +19,7 @@ pub const DEFAULT_STEPS: &[&str] = &[
     "clean-xcode",
     "clean-docker",
     "clean-brew",
+    "clean-npm",
     "bz-cleanup",
 ];
 
@@ -89,6 +90,9 @@ pub async fn run(config: &AppConfig, dry_run: bool) -> Result<()> {
                 "clean-brew" => {
                     clean_brew::run(clean_brew::Args::default(), &config.clean_brew, dry_run)
                         .await?
+                }
+                "clean-npm" => {
+                    clean_npm::run(clean_npm::Args::default(), &config.clean_npm, dry_run).await?
                 }
                 "bz-cleanup" => {
                     bz_cleanup::run(bz_cleanup::Args::default(), &config.bz_cleanup, dry_run)
