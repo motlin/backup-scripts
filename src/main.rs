@@ -35,6 +35,9 @@ enum Command {
     /// Delete stale node_modules/ directories.
     CleanNode(commands::clean_node::Args),
 
+    /// Delete stale Cargo target/ directories.
+    CleanCargo(commands::clean_cargo::Args),
+
     /// Delete stale version directories from the local Maven repository (~/.m2/repository).
     CleanM2(commands::clean_m2::Args),
 
@@ -74,7 +77,12 @@ async fn main() -> Result<()> {
         Command::CleanNode(args) => {
             commands::clean_node::run(args, &cfg.clean_node, &cfg.roots, cli.dry_run).await
         }
+        Command::CleanCargo(args) => {
+            commands::clean_cargo::run(args, &cfg.clean_cargo, &cfg.roots, cli.dry_run).await
+        }
         Command::CleanM2(args) => commands::clean_m2::run(args, &cfg.clean_m2, cli.dry_run).await,
-        Command::CleanTmp(args) => commands::clean_tmp::run(args, &cfg.clean_tmp, cli.dry_run).await,
+        Command::CleanTmp(args) => {
+            commands::clean_tmp::run(args, &cfg.clean_tmp, cli.dry_run).await
+        }
     }
 }

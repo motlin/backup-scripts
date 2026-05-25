@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -11,6 +11,7 @@ pub struct AppConfig {
     pub git_maintenance: GitMaintenanceConfig,
     pub clean_maven: CleanMavenConfig,
     pub clean_node: CleanNodeConfig,
+    pub clean_cargo: CleanCargoConfig,
     pub clean_m2: CleanM2Config,
     pub clean_tmp: CleanTmpConfig,
     pub bz_cleanup: BzCleanupConfig,
@@ -61,6 +62,15 @@ pub struct CleanMavenConfig {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CleanNodeConfig {
+    pub roots: Option<Vec<PathBuf>>,
+    pub depth: Option<usize>,
+    pub days: Option<u32>,
+    pub concurrency: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanCargoConfig {
     pub roots: Option<Vec<PathBuf>>,
     pub depth: Option<usize>,
     pub days: Option<u32>,
@@ -127,8 +137,9 @@ fn candidate_paths() -> Vec<PathBuf> {
 
     let user_root = match std::env::var("XDG_CONFIG_HOME") {
         Ok(v) if !v.is_empty() => PathBuf::from(v),
-        _ => PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".to_string()))
-            .join(".config"),
+        _ => {
+            PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/".to_string())).join(".config")
+        }
     };
     paths.push(user_root.join("backup/config.json5"));
 

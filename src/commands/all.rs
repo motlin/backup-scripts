@@ -1,14 +1,17 @@
-use anyhow::{bail, Result};
-use tracing::{info_span, warn, Instrument};
+use anyhow::{Result, bail};
+use tracing::{Instrument, info_span, warn};
 
 use crate::config::AppConfig;
 
-use super::{bz_cleanup, clean_m2, clean_maven, clean_node, clean_tmp, git_maintenance};
+use super::{
+    bz_cleanup, clean_cargo, clean_m2, clean_maven, clean_node, clean_tmp, git_maintenance,
+};
 
 pub const DEFAULT_STEPS: &[&str] = &[
     "git-maintenance",
     "clean-maven",
     "clean-node",
+    "clean-cargo",
     "clean-m2",
     "clean-tmp",
     "bz-cleanup",
@@ -46,6 +49,15 @@ pub async fn run(config: &AppConfig, dry_run: bool) -> Result<()> {
                     clean_node::run(
                         clean_node::Args::default(),
                         &config.clean_node,
+                        &config.roots,
+                        dry_run,
+                    )
+                    .await?
+                }
+                "clean-cargo" => {
+                    clean_cargo::run(
+                        clean_cargo::Args::default(),
+                        &config.clean_cargo,
                         &config.roots,
                         dry_run,
                     )
