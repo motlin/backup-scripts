@@ -41,6 +41,9 @@ enum Command {
     /// Delete stale version directories from the local Maven repository (~/.m2/repository).
     CleanM2(commands::clean_m2::Args),
 
+    /// Delete stale version directories from the Gradle modules cache (~/.gradle/caches/modules-2/files-2.1).
+    CleanGradle(commands::clean_gradle::Args),
+
     /// Delete old files and directories from /tmp and other temp locations.
     CleanTmp(commands::clean_tmp::Args),
 }
@@ -81,6 +84,9 @@ async fn main() -> Result<()> {
             commands::clean_cargo::run(args, &cfg.clean_cargo, &cfg.roots, cli.dry_run).await
         }
         Command::CleanM2(args) => commands::clean_m2::run(args, &cfg.clean_m2, cli.dry_run).await,
+        Command::CleanGradle(args) => {
+            commands::clean_gradle::run(args, &cfg.clean_gradle, cli.dry_run).await
+        }
         Command::CleanTmp(args) => {
             commands::clean_tmp::run(args, &cfg.clean_tmp, cli.dry_run).await
         }

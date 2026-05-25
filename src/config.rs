@@ -13,6 +13,7 @@ pub struct AppConfig {
     pub clean_node: CleanNodeConfig,
     pub clean_cargo: CleanCargoConfig,
     pub clean_m2: CleanM2Config,
+    pub clean_gradle: CleanGradleConfig,
     pub clean_tmp: CleanTmpConfig,
     pub bz_cleanup: BzCleanupConfig,
     pub all: AllConfig,
@@ -86,6 +87,14 @@ pub struct CleanM2Config {
     pub concurrency: Option<usize>,
     /// File extension used to identify version directories. Default: "pom".
     pub marker_extension: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanGradleConfig {
+    pub cache_dir: Option<PathBuf>,
+    pub days: Option<u32>,
+    pub concurrency: Option<usize>,
 }
 
 #[derive(Debug, Default, Deserialize)]

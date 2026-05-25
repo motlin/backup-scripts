@@ -4,7 +4,8 @@ use tracing::{Instrument, info_span, warn};
 use crate::config::AppConfig;
 
 use super::{
-    bz_cleanup, clean_cargo, clean_m2, clean_maven, clean_node, clean_tmp, git_maintenance,
+    bz_cleanup, clean_cargo, clean_gradle, clean_m2, clean_maven, clean_node, clean_tmp,
+    git_maintenance,
 };
 
 pub const DEFAULT_STEPS: &[&str] = &[
@@ -13,6 +14,7 @@ pub const DEFAULT_STEPS: &[&str] = &[
     "clean-node",
     "clean-cargo",
     "clean-m2",
+    "clean-gradle",
     "clean-tmp",
     "bz-cleanup",
 ];
@@ -65,6 +67,10 @@ pub async fn run(config: &AppConfig, dry_run: bool) -> Result<()> {
                 }
                 "clean-m2" => {
                     clean_m2::run(clean_m2::Args::default(), &config.clean_m2, dry_run).await?
+                }
+                "clean-gradle" => {
+                    clean_gradle::run(clean_gradle::Args::default(), &config.clean_gradle, dry_run)
+                        .await?
                 }
                 "clean-tmp" => {
                     clean_tmp::run(clean_tmp::Args::default(), &config.clean_tmp, dry_run).await?
