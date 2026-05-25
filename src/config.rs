@@ -15,6 +15,7 @@ pub struct AppConfig {
     pub clean_m2: CleanM2Config,
     pub clean_gradle: CleanGradleConfig,
     pub clean_tmp: CleanTmpConfig,
+    pub clean_xcode: CleanXcodeConfig,
     pub clean_docker: CleanDockerConfig,
     pub bz_cleanup: BzCleanupConfig,
     pub all: AllConfig,
@@ -102,6 +103,14 @@ pub struct CleanGradleConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct CleanTmpConfig {
     pub roots: Option<Vec<PathBuf>>,
+    pub days: Option<u32>,
+    pub concurrency: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanXcodeConfig {
+    pub data_dir: Option<PathBuf>,
     pub days: Option<u32>,
     pub concurrency: Option<usize>,
 }

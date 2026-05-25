@@ -47,6 +47,9 @@ enum Command {
     /// Delete old files and directories from /tmp and other temp locations.
     CleanTmp(commands::clean_tmp::Args),
 
+    /// Delete stale per-project Xcode DerivedData directories.
+    CleanXcode(commands::clean_xcode::Args),
+
     /// Prune unused Docker images, containers, volumes, build cache, and networks.
     CleanDocker(commands::clean_docker::Args),
 }
@@ -92,6 +95,9 @@ async fn main() -> Result<()> {
         }
         Command::CleanTmp(args) => {
             commands::clean_tmp::run(args, &cfg.clean_tmp, cli.dry_run).await
+        }
+        Command::CleanXcode(args) => {
+            commands::clean_xcode::run(args, &cfg.clean_xcode, cli.dry_run).await
         }
         Command::CleanDocker(args) => {
             commands::clean_docker::run(args, &cfg.clean_docker, cli.dry_run).await
