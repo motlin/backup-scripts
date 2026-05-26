@@ -49,8 +49,6 @@ pub struct GitMaintenanceConfig {
     pub roots: Option<Vec<PathBuf>>,
     pub depth: Option<usize>,
     pub concurrency: Option<usize>,
-    pub tasks: Option<Vec<String>>,
-    pub prefetch: Option<bool>,
     /// Run maintenance on submodules too. Default true.
     pub submodules: Option<bool>,
 }

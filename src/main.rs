@@ -26,7 +26,9 @@ enum Command {
     /// Delete old Backblaze bz_done_*.dat files to reclaim disk space.
     BzCleanup(commands::bz_cleanup::Args),
 
-    /// Run `git maintenance run` across every discovered git repo.
+    /// Run aggressive maintenance (pack-refs, reflog expire, rerere gc, worktree prune,
+    /// `repack -Adf --depth=100 --window=250`, prune --expire=1.week.ago, commit-graph write)
+    /// on every discovered git repo. Includes objects from alternates.
     GitMaintenance(commands::git_maintenance::Args),
 
     /// Delete stale Maven target/ directories.
