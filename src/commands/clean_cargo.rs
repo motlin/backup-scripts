@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use tracing::{Instrument, info_span};
 
 use crate::config::{CleanCargoConfig, resolve_roots};
-use crate::ui;
 
 use super::cleaner;
 
@@ -45,7 +44,7 @@ pub async fn run(
         .unwrap_or(DEFAULT_CONCURRENCY);
     let roots = resolve_roots(args.roots, &cfg.roots, global_roots, "clean_cargo")?;
 
-    let result = cleaner::clean(
+    cleaner::clean(
         "clean-cargo",
         "Cargo.toml",
         "target",
@@ -56,10 +55,5 @@ pub async fn run(
         dry_run,
     )
     .instrument(info_span!("clean-cargo"))
-    .await?;
-
-    if let Some((summary, items)) = result {
-        ui::print_tree(&format!("clean-cargo: {summary}"), &items);
-    }
-    Ok(())
+    .await
 }
