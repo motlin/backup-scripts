@@ -1,1 +1,17 @@
+# Build output
 /target
+
+# Local environment overrides
+.envrc
+
+# macOS
+.DS_Store
+
+# Local documentation and Claude state
+.llm/
+/.claude/*
+!/.claude/commands/
+/.claude/settings.local.json
+
+# Local-only branch marker
+JUSTFILE_BRANCH
