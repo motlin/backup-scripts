@@ -1,16 +1,16 @@
 use anyhow::Result;
 use clap::Args as ClapArgs;
-use humansize::{format_size, BINARY};
+use humansize::{BINARY, format_size};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
-use tracing::{info, info_span, warn, Instrument};
+use tracing::{Instrument, info, info_span, warn};
 use walkdir::WalkDir;
 
-use crate::config::{expand_tilde, CleanTmpConfig};
+use crate::config::{CleanTmpConfig, expand_tilde};
 use crate::ui::{self, CommandBar, TreeItem};
 use crate::walk::{dir_size, older_than_days};
 
@@ -92,15 +92,7 @@ pub async fn run(args: Args, cfg: &CleanTmpConfig, dry_run: bool) -> Result<()> 
             set.spawn(
                 async move {
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                    clean_one(
-                        path,
-                        dry_run,
-                        &total_bytes,
-                        &total_count,
-                        &bar,
-                        &items,
-                    )
-                    .await;
+                    clean_one(path, dry_run, &total_bytes, &total_count, &bar, &items).await;
                 }
                 .in_current_span(),
             );
@@ -123,10 +115,7 @@ pub async fn run(args: Args, cfg: &CleanTmpConfig, dry_run: bool) -> Result<()> 
 
         Ok(())
     }
-    .instrument(info_span!(
-        "clean-tmp",
-        days,
-    ))
+    .instrument(info_span!("clean-tmp", days,))
     .await
 }
 
@@ -144,10 +133,7 @@ async fn clean_one(
     let size = if path.is_dir() {
         dir_size(&path).await.unwrap_or(0)
     } else {
-        std::fs::metadata(&path)
-            .ok()
-            .map(|m| m.len())
-            .unwrap_or(0)
+        std::fs::metadata(&path).ok().map(|m| m.len()).unwrap_or(0)
     };
 
     let (ok, detail) = if dry_run {

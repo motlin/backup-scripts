@@ -1,12 +1,12 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
-use humansize::{format_size, BINARY};
+use humansize::{BINARY, format_size};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tokio::process::Command;
-use tracing::{info, info_span, warn, Instrument};
+use tracing::{Instrument, info, info_span, warn};
 
-use crate::config::{expand_tilde, BzCleanupConfig};
+use crate::config::{BzCleanupConfig, expand_tilde};
 use crate::ui;
 
 pub const DEFAULT_DIR: &str = "/Library/Backblaze.bzpkg/bzdata/bzbackup/bzdatacenter";

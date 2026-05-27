@@ -82,9 +82,17 @@ fn done_err_style() -> ProgressStyle {
 pub fn print_tree(header: &str, items: &[TreeItem]) {
     let _ = mp().println("");
     let _ = mp().println(header);
-    let max_label = items.iter().map(|i| i.label.chars().count()).max().unwrap_or(0);
+    let max_label = items
+        .iter()
+        .map(|i| i.label.chars().count())
+        .max()
+        .unwrap_or(0);
     for (i, item) in items.iter().enumerate() {
-        let branch = if i + 1 == items.len() { "└──" } else { "├──" };
+        let branch = if i + 1 == items.len() {
+            "└──"
+        } else {
+            "├──"
+        };
         let icon = if item.ok { "✓" } else { "✗" };
         let label = pad_right(&item.label, max_label);
         let _ = mp().println(format!("  {branch} {icon} {label}  {}", item.detail));

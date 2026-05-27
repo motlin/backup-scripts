@@ -1,9 +1,9 @@
 use anyhow::Result;
 use clap::Args as ClapArgs;
 use std::path::PathBuf;
-use tracing::{info_span, Instrument};
+use tracing::{Instrument, info_span};
 
-use crate::config::{resolve_roots, CleanNodeConfig};
+use crate::config::{CleanNodeConfig, resolve_roots};
 
 use super::cleaner;
 

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Args as ClapArgs;
-use humansize::{format_size, BINARY};
+use humansize::{BINARY, format_size};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -8,10 +8,10 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
-use tracing::{info, info_span, warn, Instrument};
+use tracing::{Instrument, info, info_span, warn};
 use walkdir::WalkDir;
 
-use crate::config::{expand_tilde, CleanM2Config};
+use crate::config::{CleanM2Config, expand_tilde};
 use crate::ui::{self, CommandBar, TreeItem};
 use crate::walk::{dir_size, older_than_days};
 
@@ -129,11 +129,7 @@ pub async fn run(args: Args, cfg: &CleanM2Config, dry_run: bool) -> Result<()> {
 
         Ok(())
     }
-    .instrument(info_span!(
-        "clean-m2",
-        snapshots_only,
-        days,
-    ))
+    .instrument(info_span!("clean-m2", snapshots_only, days,))
     .await
 }
 

@@ -6,12 +6,12 @@ use std::time::Instant;
 use tokio::process::Command;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
-use tracing::{info, info_span, warn, Instrument};
+use tracing::{Instrument, info, info_span, warn};
 
-use crate::config::{resolve_roots, GitMaintenanceConfig};
+use crate::config::{GitMaintenanceConfig, resolve_roots};
 use crate::ui::{self, CommandBar, TreeItem};
 use crate::walk::{dir_size, find_dirs_with_marker};
-use humansize::{format_size, BINARY};
+use humansize::{BINARY, format_size};
 
 pub const DEFAULT_DEPTH: usize = 3;
 pub const DEFAULT_CONCURRENCY: usize = 8;
@@ -32,14 +32,16 @@ const MAINTENANCE_STEPS: &[(&str, &[&str])] = &[
     ("pack-refs", &["pack-refs", "--all", "--prune"]),
     (
         "reflog-expire",
-        &["reflog", "expire", "--all", "--expire-unreachable=1.week.ago"],
+        &[
+            "reflog",
+            "expire",
+            "--all",
+            "--expire-unreachable=1.week.ago",
+        ],
     ),
     ("rerere-gc", &["rerere", "gc"]),
     ("worktree-prune", &["worktree", "prune"]),
-    (
-        "repack",
-        &["repack", "-Adf", "--depth=100", "--window=250"],
-    ),
+    ("repack", &["repack", "-Adf", "--depth=100", "--window=250"]),
     ("prune", &["prune", "--expire=1.week.ago"]),
     (
         "commit-graph",
@@ -101,11 +103,7 @@ pub async fn run(
         repos.sort();
         repos.dedup();
 
-        info!(
-            repos = repos.len(),
-            submodules,
-            "discovered git repos"
-        );
+        info!(repos = repos.len(), submodules, "discovered git repos");
 
         if dry_run {
             for repo in &repos {
@@ -213,7 +211,10 @@ async fn maintain_one(
         (false, format!("{step}: {err} ({elapsed_ms}ms)"))
     } else {
         if size_after < size_before {
-            total_freed.fetch_add(size_before - size_after, std::sync::atomic::Ordering::Relaxed);
+            total_freed.fetch_add(
+                size_before - size_after,
+                std::sync::atomic::Ordering::Relaxed,
+            );
         }
         let delta_str = size_delta_str(size_before, size_after);
         let bar_freed = total_freed.load(std::sync::atomic::Ordering::Relaxed);
@@ -243,7 +244,10 @@ fn resolve_gitdir(repo: &std::path::Path) -> PathBuf {
         return dotgit;
     }
     if let Ok(content) = std::fs::read_to_string(&dotgit)
-        && let Some(path) = content.lines().next().and_then(|l| l.strip_prefix("gitdir: "))
+        && let Some(path) = content
+            .lines()
+            .next()
+            .and_then(|l| l.strip_prefix("gitdir: "))
     {
         let p = std::path::Path::new(path);
         return if p.is_absolute() {

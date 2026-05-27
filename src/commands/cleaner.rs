@@ -1,12 +1,12 @@
 use anyhow::Result;
-use humansize::{format_size, BINARY};
+use humansize::{BINARY, format_size};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
-use tracing::{info, warn, Instrument};
+use tracing::{Instrument, info, warn};
 
 use crate::ui::{self, CommandBar, TreeItem};
 use crate::walk::{dir_size, find_dirs_with_marker, older_than_days};
@@ -66,8 +66,16 @@ pub async fn clean(
         set.spawn(
             async move {
                 let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                clean_one(project, junk, dry_run, &total_bytes, &total_count, &bar, &items)
-                    .await;
+                clean_one(
+                    project,
+                    junk,
+                    dry_run,
+                    &total_bytes,
+                    &total_count,
+                    &bar,
+                    &items,
+                )
+                .await;
             }
             .in_current_span(),
         );

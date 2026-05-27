@@ -204,9 +204,10 @@ pub fn expand_tilde(path: &Path) -> PathBuf {
             return PathBuf::from(home).join(rest);
         }
     } else if s == "~"
-        && let Ok(home) = std::env::var("HOME") {
-            return PathBuf::from(home);
-        }
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return PathBuf::from(home);
+    }
     path.to_path_buf()
 }
 
@@ -226,13 +227,15 @@ pub fn resolve_roots(
         return Ok(expand_tildes(cli));
     }
     if let Some(c) = cmd_cfg.as_ref()
-        && !c.is_empty() {
-            return Ok(expand_tildes(c.clone()));
-        }
+        && !c.is_empty()
+    {
+        return Ok(expand_tildes(c.clone()));
+    }
     if let Some(g) = global_cfg.as_ref()
-        && !g.is_empty() {
-            return Ok(expand_tildes(g.clone()));
-        }
+        && !g.is_empty()
+    {
+        return Ok(expand_tildes(g.clone()));
+    }
     bail!(
         "no roots configured for `{cmd_name}`: pass --root, or set `roots` (top-level) or `{cmd_name}.roots` in your config file"
     );
