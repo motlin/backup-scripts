@@ -28,6 +28,10 @@ pub const DEFAULT_SUBMODULES: bool = true;
 /// 5. `repack -Adf`         single-pack, recompute deltas, exile unreachables to loose
 /// 6. `prune`               drop loose unreachables older than 1 week
 /// 7. `commit-graph write`  rebuild commit-graph + changed-path Bloom filters
+///
+/// When `--fsck` is passed, `git fsck` runs after the 7 steps to validate repository
+/// integrity. Findings (dangling/unreachable/corrupt objects) are reported via the
+/// progress tree but do not mark the repo as failed.
 const MAINTENANCE_STEPS: &[(&str, &[&str])] = &[
     ("pack-refs", &["pack-refs", "--all", "--prune"]),
     (
@@ -67,6 +71,11 @@ pub struct Args {
     /// Submodules are included by default. [config: git_maintenance.submodules, default: true]
     #[arg(long)]
     no_submodules: bool,
+
+    /// Run `git fsck` after maintenance to validate repository integrity. Findings are
+    /// reported but do not fail the repo. [CLI only; no config field]
+    #[arg(long)]
+    fsck: bool,
 }
 
 pub async fn run(
@@ -85,6 +94,7 @@ pub async fn run(
     } else {
         cfg.submodules.unwrap_or(DEFAULT_SUBMODULES)
     };
+    let fsck = args.fsck;
 
     let roots = resolve_roots(args.roots, &cfg.roots, global_roots, "git_maintenance")?;
 
@@ -130,7 +140,7 @@ pub async fn run(
             set.spawn(
                 async move {
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                    maintain_one(repo, &bar, &items, &total_freed).await;
+                    maintain_one(repo, &bar, &items, &total_freed, fsck).await;
                 }
                 .in_current_span(),
             );
@@ -168,6 +178,7 @@ async fn maintain_one(
     bar: &CommandBar,
     items: &Mutex<Vec<TreeItem>>,
     total_freed: &std::sync::atomic::AtomicU64,
+    fsck: bool,
 ) {
     let label = repo
         .file_name()
@@ -203,6 +214,12 @@ async fn maintain_one(
         }
     }
 
+    let fsck_summary = if fsck && failure.is_none() {
+        Some(run_fsck(&repo).await)
+    } else {
+        None
+    };
+
     let elapsed_ms = started.elapsed().as_millis() as u64;
     let size_after = dir_size(&gitdir).await.unwrap_or(size_before);
 
@@ -219,12 +236,48 @@ async fn maintain_one(
         let delta_str = size_delta_str(size_before, size_after);
         let bar_freed = total_freed.load(std::sync::atomic::Ordering::Relaxed);
         bar.set_message(format!("{} freed", format_size(bar_freed, BINARY)));
-        info!("✓ {label}  {delta_str} in {elapsed_ms}ms");
-        (true, format!("{delta_str} in {elapsed_ms}ms"))
+        let fsck_suffix = match &fsck_summary {
+            Some(s) if !s.is_empty() => format!("; fsck: {s}"),
+            _ => String::new(),
+        };
+        info!("✓ {label}  {delta_str} in {elapsed_ms}ms{fsck_suffix}");
+        (true, format!("{delta_str} in {elapsed_ms}ms{fsck_suffix}"))
     };
 
     bar.inc(1);
     items.lock().unwrap().push(TreeItem { label, detail, ok });
+}
+
+/// Run `git fsck` in `repo` and return a short summary of findings.
+///
+/// `git fsck` writes findings (dangling/unreachable/missing/corrupt objects) to stderr,
+/// one per line like `dangling tree <hash>` or `missing blob <hash>`. We count
+/// occurrences by category (first whitespace-separated word) and return a compact
+/// summary like `3 dangling, 1 missing`. Returns an empty string when the repo is clean.
+async fn run_fsck(repo: &std::path::Path) -> String {
+    let mut cmd = Command::new("git");
+    cmd.arg("-C").arg(repo);
+    cmd.args(["fsck", "--full", "--unreachable", "--dangling"]);
+    let output = match cmd.output().await {
+        Ok(o) => o,
+        Err(e) => return format!("failed to invoke git fsck: {e}"),
+    };
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for line in stderr.lines() {
+        if let Some(category) = line.split_whitespace().next() {
+            *counts.entry(category).or_insert(0) += 1;
+        }
+    }
+    if counts.is_empty() {
+        return String::new();
+    }
+    counts
+        .into_iter()
+        .map(|(k, v)| format!("{v} {k}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn size_delta_str(before: u64, after: u64) -> String {
