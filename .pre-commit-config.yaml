@@ -1,0 +1,41 @@
+repos:
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v6.0.0
+      hooks:
+          - id: check-yaml
+            args: ['--allow-multiple-documents']
+          - id: check-json
+            exclude: "biome\\.jsonc|tsconfig.*\\.json|markdownlint.*\\.jsonc|markdownlint-cli2.*\\.jsonc"
+          - id: check-toml
+          - id: check-xml
+          - id: end-of-file-fixer
+            exclude: "^\\.idea/"
+          - id: trailing-whitespace
+            exclude: "^\\.idea/"
+          - id: check-added-large-files
+            args: ['--maxkb=1000']
+          - id: check-case-conflict
+          - id: check-merge-conflict
+          - id: detect-private-key
+          - id: mixed-line-ending
+            args: ['--fix=lf']
+
+    - repo: local
+      hooks:
+          - id: cargo-fmt
+            name: cargo fmt
+            entry: cargo fmt --
+            language: system
+            types: [rust]
+            pass_filenames: true
+          - id: cargo-clippy
+            name: cargo clippy
+            entry: cargo clippy --release --all-targets -- -D warnings
+            language: system
+            types: [rust]
+            pass_filenames: false
+          - id: markdownlint-cli2
+            name: markdownlint-cli2
+            entry: markdownlint-cli2
+            language: system
+            types: [markdown]
