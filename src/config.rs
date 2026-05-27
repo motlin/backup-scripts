@@ -19,6 +19,7 @@ pub struct AppConfig {
     pub clean_docker: CleanDockerConfig,
     pub clean_brew: CleanBrewConfig,
     pub clean_npm: CleanNpmConfig,
+    pub clean_trash: CleanTrashConfig,
     pub bz_cleanup: BzCleanupConfig,
     pub all: AllConfig,
 }
@@ -139,6 +140,10 @@ pub struct CleanNpmConfig {
     pub days: Option<u32>,
     pub concurrency: Option<usize>,
 }
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanTrashConfig {}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]

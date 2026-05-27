@@ -60,6 +60,10 @@ enum Command {
 
     /// Delete stale entries from the npm cacache directory (~/.npm/_cacache).
     CleanNpm(commands::clean_npm::Args),
+
+    /// Empty the macOS Trash (~/.Trash). Deletes the contents of the Trash but
+    /// preserves the directory itself.
+    CleanTrash(commands::clean_trash::Args),
 }
 
 #[tokio::main]
@@ -115,6 +119,9 @@ async fn main() -> Result<()> {
         }
         Command::CleanNpm(args) => {
             commands::clean_npm::run(args, &cfg.clean_npm, cli.dry_run).await
+        }
+        Command::CleanTrash(args) => {
+            commands::clean_trash::run(args, &cfg.clean_trash, cli.dry_run).await
         }
     }
 }

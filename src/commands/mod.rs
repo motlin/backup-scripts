@@ -9,6 +9,7 @@ pub mod clean_maven;
 pub mod clean_node;
 pub mod clean_npm;
 pub mod clean_tmp;
+pub mod clean_trash;
 pub mod clean_xcode;
 pub mod cleaner;
 pub mod git_maintenance;
