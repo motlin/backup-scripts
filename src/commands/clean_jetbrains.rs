@@ -9,7 +9,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
 
-use crate::config::{CleanXcodeConfig, expand_tilde};
+use crate::config::{CleanJetBrainsConfig, expand_tilde};
 use crate::ui::{self, CommandBar, TreeItem};
 use crate::walk::{dir_size, older_than_days};
 
@@ -18,25 +18,25 @@ pub const DEFAULT_CONCURRENCY: usize = 4;
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Path to Xcode DerivedData. [config: clean_xcode.data_dir, default: ~/Library/Developer/Xcode/DerivedData]
+    /// Path to JetBrains caches. [config: clean_jetbrains.cache_dir, default: ~/Library/Caches/JetBrains]
     #[arg(long)]
-    pub data_dir: Option<PathBuf>,
+    pub cache_dir: Option<PathBuf>,
 
-    /// Only delete project dirs older than this many days. 0 = always clean. [config: clean_xcode.days, default: 30]
+    /// Only delete per-product dirs older than this many days. 0 = always clean. [config: clean_jetbrains.days, default: 30]
     #[arg(long)]
     pub days: Option<u32>,
 
-    /// Maximum number of parallel deletions. [config: clean_xcode.concurrency, default: 4]
+    /// Maximum number of parallel deletions. [config: clean_jetbrains.concurrency, default: 4]
     #[arg(long)]
     pub concurrency: Option<usize>,
 }
 
-pub async fn run(args: Args, cfg: &CleanXcodeConfig, dry_run: bool) -> Result<()> {
-    let data_dir = args
-        .data_dir
-        .or_else(|| cfg.data_dir.clone())
+pub async fn run(args: Args, cfg: &CleanJetBrainsConfig, dry_run: bool) -> Result<()> {
+    let cache_dir = args
+        .cache_dir
+        .or_else(|| cfg.cache_dir.clone())
         .map(|p| expand_tilde(&p))
-        .unwrap_or_else(default_derived_data);
+        .unwrap_or_else(default_cache_dir);
     let days = args.days.or(cfg.days).unwrap_or(DEFAULT_DAYS);
     let concurrency = args
         .concurrency
@@ -44,18 +44,18 @@ pub async fn run(args: Args, cfg: &CleanXcodeConfig, dry_run: bool) -> Result<()
         .unwrap_or(DEFAULT_CONCURRENCY);
 
     let result = async move {
-        if !data_dir.exists() {
+        if !cache_dir.exists() {
             info!(
-                "Xcode DerivedData does not exist (non-Mac or no Xcode), skipping: {}",
-                data_dir.display()
+                "JetBrains caches dir does not exist, skipping: {}",
+                cache_dir.display()
             );
             return Ok::<_, anyhow::Error>(None);
         }
 
-        let project_dirs = find_project_dirs(&data_dir);
-        info!(found = project_dirs.len(), "candidate project dirs");
+        let product_dirs = find_product_dirs(&cache_dir);
+        info!(found = product_dirs.len(), "candidate per-product dirs");
 
-        let candidates: Vec<PathBuf> = project_dirs
+        let candidates: Vec<PathBuf> = product_dirs
             .into_iter()
             .filter(|d| older_than_days(d, days))
             .collect();
@@ -69,9 +69,9 @@ pub async fn run(args: Args, cfg: &CleanXcodeConfig, dry_run: bool) -> Result<()
         let total_bytes = Arc::new(AtomicU64::new(0));
         let total_count = Arc::new(AtomicU64::new(0));
         let items: Arc<Mutex<Vec<TreeItem>>> = Arc::new(Mutex::new(Vec::new()));
-        let bar = Arc::new(CommandBar::new("clean-xcode", candidates.len() as u64));
+        let bar = Arc::new(CommandBar::new("clean-jetbrains", candidates.len() as u64));
 
-        let data_for_labels = Arc::new(data_dir.clone());
+        let cache_for_labels = Arc::new(cache_dir.clone());
         let sem = Arc::new(Semaphore::new(concurrency.max(1)));
         let mut set: JoinSet<()> = JoinSet::new();
         for dir in candidates {
@@ -80,9 +80,9 @@ pub async fn run(args: Args, cfg: &CleanXcodeConfig, dry_run: bool) -> Result<()
             let total_count = Arc::clone(&total_count);
             let bar = Arc::clone(&bar);
             let items = Arc::clone(&items);
-            let data_for_labels = Arc::clone(&data_for_labels);
+            let cache_for_labels = Arc::clone(&cache_for_labels);
             let label = dir
-                .strip_prefix(&data_dir)
+                .strip_prefix(&cache_dir)
                 .unwrap_or(&dir)
                 .display()
                 .to_string();
@@ -96,11 +96,11 @@ pub async fn run(args: Args, cfg: &CleanXcodeConfig, dry_run: bool) -> Result<()
                         &total_count,
                         &bar,
                         &items,
-                        &data_for_labels,
+                        &cache_for_labels,
                     )
                     .await;
                 }
-                .instrument(info_span!("project", name = %label)),
+                .instrument(info_span!("product", name = %label)),
             );
         }
         while set.join_next().await.is_some() {}
@@ -120,11 +120,11 @@ pub async fn run(args: Args, cfg: &CleanXcodeConfig, dry_run: bool) -> Result<()
 
         Ok::<_, anyhow::Error>(Some((summary, items)))
     }
-    .instrument(info_span!("clean-xcode", days))
+    .instrument(info_span!("clean-jetbrains", days))
     .await?;
 
     if let Some((summary, items)) = result {
-        ui::print_tree(&format!("clean-xcode: {summary}"), &items);
+        ui::print_tree(&format!("clean-jetbrains: {summary}"), &items);
     }
     Ok(())
 }
@@ -136,10 +136,10 @@ async fn clean_one(
     total_count: &AtomicU64,
     bar: &CommandBar,
     items: &Mutex<Vec<TreeItem>>,
-    data_dir: &Path,
+    cache_dir: &Path,
 ) {
     let label = dir
-        .strip_prefix(data_dir)
+        .strip_prefix(cache_dir)
         .unwrap_or(&dir)
         .display()
         .to_string();
@@ -182,15 +182,14 @@ async fn clean_one(
     items.lock().unwrap().push(TreeItem { label, detail, ok });
 }
 
-/// Each entry directly under DerivedData is one project's build cache, named like
-/// `<project-name>-<hash>`. We only consider TOP-LEVEL directory entries — we do not
-/// recurse — so a single mtime check on the project dir decides eligibility. This is
-/// fast and aligns with how Xcode regenerates these caches on the next build.
-fn find_project_dirs(data_dir: &Path) -> Vec<PathBuf> {
-    let read_dir = match std::fs::read_dir(data_dir) {
+/// Top-level entries under ~/Library/Caches/JetBrains are per-product caches
+/// (`IntelliJIdea2026.1`, `WebStorm2026.1`, …) plus the `Toolbox` directory.
+/// `Toolbox` is the installed-IDE store, not a cache, so skip it.
+fn find_product_dirs(cache_dir: &Path) -> Vec<PathBuf> {
+    let read_dir = match std::fs::read_dir(cache_dir) {
         Ok(rd) => rd,
         Err(e) => {
-            warn!("cannot read {}: {e}", data_dir.display());
+            warn!("cannot read {}: {e}", cache_dir.display());
             return Vec::new();
         }
     };
@@ -204,13 +203,21 @@ fn find_project_dirs(data_dir: &Path) -> Vec<PathBuf> {
         if !file_type.is_dir() {
             continue;
         }
+        let name = entry.file_name();
+        if is_excluded_child(name.to_string_lossy().as_ref()) {
+            continue;
+        }
         dirs.push(entry.path());
     }
     dirs.sort();
     dirs
 }
 
-fn default_derived_data() -> PathBuf {
+fn is_excluded_child(name: &str) -> bool {
+    name == "Toolbox"
+}
+
+fn default_cache_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/".to_string());
-    PathBuf::from(home).join("Library/Developer/Xcode/DerivedData")
+    PathBuf::from(home).join("Library/Caches/JetBrains")
 }

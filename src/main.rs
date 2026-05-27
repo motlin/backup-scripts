@@ -64,6 +64,35 @@ enum Command {
     /// Empty the macOS Trash (~/.Trash). Deletes the contents of the Trash but
     /// preserves the directory itself.
     CleanTrash(commands::clean_trash::Args),
+
+    /// Run `yarn cache clean` to clear the Yarn package cache.
+    CleanYarn(commands::clean_yarn::Args),
+
+    /// Run `pnpm store prune` to remove unreferenced packages from the pnpm store.
+    CleanPnpm(commands::clean_pnpm::Args),
+
+    /// Run `pip cache purge` to clear the pip download cache.
+    CleanPip(commands::clean_pip::Args),
+
+    /// Run `pod cache clean --all` to clear the CocoaPods download cache.
+    CleanCocoapods(commands::clean_cocoapods::Args),
+
+    /// Run `go clean -cache` to clear the Go build cache.
+    CleanGoBuild(commands::clean_go_build::Args),
+
+    /// Delete stale per-product JetBrains IDE caches (~/Library/Caches/JetBrains/*).
+    /// Skips the `Toolbox` subdir (installed IDE binaries, not a cache). Close
+    /// the relevant IDEs before running to avoid index corruption.
+    CleanJetbrains(commands::clean_jetbrains::Args),
+
+    /// Delete stale Playwright browser-version dirs (~/Library/Caches/ms-playwright/*).
+    CleanPlaywright(commands::clean_playwright::Args),
+
+    /// Delete stale Cypress binary version dirs (~/Library/Caches/Cypress/*).
+    CleanCypress(commands::clean_cypress::Args),
+
+    /// Delete stale node-gyp per-Node-version header dirs (~/Library/Caches/node-gyp/*).
+    CleanNodeGyp(commands::clean_node_gyp::Args),
 }
 
 #[tokio::main]
@@ -122,6 +151,33 @@ async fn main() -> Result<()> {
         }
         Command::CleanTrash(args) => {
             commands::clean_trash::run(args, &cfg.clean_trash, cli.dry_run).await
+        }
+        Command::CleanYarn(args) => {
+            commands::clean_yarn::run(args, &cfg.clean_yarn, cli.dry_run).await
+        }
+        Command::CleanPnpm(args) => {
+            commands::clean_pnpm::run(args, &cfg.clean_pnpm, cli.dry_run).await
+        }
+        Command::CleanPip(args) => {
+            commands::clean_pip::run(args, &cfg.clean_pip, cli.dry_run).await
+        }
+        Command::CleanCocoapods(args) => {
+            commands::clean_cocoapods::run(args, &cfg.clean_cocoapods, cli.dry_run).await
+        }
+        Command::CleanGoBuild(args) => {
+            commands::clean_go_build::run(args, &cfg.clean_go_build, cli.dry_run).await
+        }
+        Command::CleanJetbrains(args) => {
+            commands::clean_jetbrains::run(args, &cfg.clean_jetbrains, cli.dry_run).await
+        }
+        Command::CleanPlaywright(args) => {
+            commands::clean_playwright::run(args, &cfg.clean_playwright, cli.dry_run).await
+        }
+        Command::CleanCypress(args) => {
+            commands::clean_cypress::run(args, &cfg.clean_cypress, cli.dry_run).await
+        }
+        Command::CleanNodeGyp(args) => {
+            commands::clean_node_gyp::run(args, &cfg.clean_node_gyp, cli.dry_run).await
         }
     }
 }

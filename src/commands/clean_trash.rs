@@ -169,7 +169,8 @@ async fn clean_one(
 
     bar.inc(1);
     let running_bytes = total_bytes.load(Ordering::Relaxed);
-    bar.set_message(format!("{} freed", format_size(running_bytes, BINARY)));
+    let verb = if dry_run { "would free" } else { "freed" };
+    bar.set_message(format!("{verb} {}", format_size(running_bytes, BINARY)));
 
     items.lock().unwrap().push(TreeItem { label, detail, ok });
 }

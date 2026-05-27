@@ -20,6 +20,15 @@ pub struct AppConfig {
     pub clean_brew: CleanBrewConfig,
     pub clean_npm: CleanNpmConfig,
     pub clean_trash: CleanTrashConfig,
+    pub clean_yarn: CleanYarnConfig,
+    pub clean_pnpm: CleanPnpmConfig,
+    pub clean_pip: CleanPipConfig,
+    pub clean_cocoapods: CleanCocoaPodsConfig,
+    pub clean_go_build: CleanGoBuildConfig,
+    pub clean_jetbrains: CleanJetBrainsConfig,
+    pub clean_playwright: CleanPlaywrightConfig,
+    pub clean_cypress: CleanCypressConfig,
+    pub clean_node_gyp: CleanNodeGypConfig,
     pub bz_cleanup: BzCleanupConfig,
     pub all: AllConfig,
 }
@@ -144,6 +153,58 @@ pub struct CleanNpmConfig {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CleanTrashConfig {}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanYarnConfig {}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanPnpmConfig {}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanPipConfig {}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanCocoaPodsConfig {}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanGoBuildConfig {}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanJetBrainsConfig {
+    pub cache_dir: Option<PathBuf>,
+    pub days: Option<u32>,
+    pub concurrency: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanPlaywrightConfig {
+    pub cache_dir: Option<PathBuf>,
+    pub days: Option<u32>,
+    pub concurrency: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanCypressConfig {
+    pub cache_dir: Option<PathBuf>,
+    pub days: Option<u32>,
+    pub concurrency: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanNodeGypConfig {
+    pub cache_dir: Option<PathBuf>,
+    pub days: Option<u32>,
+    pub concurrency: Option<usize>,
+}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]

@@ -66,16 +66,16 @@ async fn run_brew_cleanup(prune: &str, dry_run: bool) -> Result<()> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let freed = parse_freed_bytes(&stdout);
+    let freed_str = parse_freed_bytes(&stdout)
+        .map(|b| format_size(b, BINARY))
+        .unwrap_or_else(|| "unknown".to_string());
+    let elapsed_ms = started.elapsed().as_millis() as u64;
 
-    info!(
-        freed = %freed
-            .map(|b| format_size(b, BINARY))
-            .unwrap_or_else(|| "unknown".to_string()),
-        elapsed_ms = started.elapsed().as_millis() as u64,
-        action = if dry_run { "would free" } else { "freed" },
-        "brew cleanup complete"
-    );
+    if dry_run {
+        info!(elapsed_ms, "dry run: brew cleanup would free {freed_str}");
+    } else {
+        info!(elapsed_ms, "brew cleanup freed {freed_str}");
+    }
     Ok(())
 }
 
