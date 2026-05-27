@@ -8,7 +8,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tracing::{Instrument, info, warn};
 
-use crate::ui::{self, CommandBar, TreeItem};
+use crate::ui::{self, CommandBar, TreeItem, format_duration};
 use crate::walk::{dir_size, find_dirs_with_marker, older_than_days};
 
 /// Caller is responsible for wrapping this future in its own `info_span!` (e.g.
@@ -129,9 +129,9 @@ async fn clean_one(
                 total_bytes.fetch_add(size, Ordering::Relaxed);
                 total_count.fetch_add(1, Ordering::Relaxed);
                 let det = format!(
-                    "deleted {} in {}ms",
+                    "deleted {} in {}",
                     format_size(size, BINARY),
-                    started.elapsed().as_millis()
+                    format_duration(started.elapsed().as_millis() as u64)
                 );
                 info!("✓ {label}  {}", det);
                 (true, det)

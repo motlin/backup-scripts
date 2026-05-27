@@ -99,6 +99,26 @@ pub fn print_tree(header: &str, items: &[TreeItem]) {
     }
 }
 
+/// Format an elapsed duration in milliseconds as a human-readable string.
+///
+/// Rules:
+/// - `<100ms` → `Xms` (e.g. `42ms`)
+/// - `100ms-60s` → `X.Xs` (e.g. `9.6s`)
+/// - `>=60s` → `XmYs` (e.g. `2m 15s`)
+pub fn format_duration(ms: u64) -> String {
+    if ms < 100 {
+        format!("{ms}ms")
+    } else if ms < 60_000 {
+        let secs = ms as f64 / 1000.0;
+        format!("{secs:.1}s")
+    } else {
+        let total_secs = ms / 1000;
+        let minutes = total_secs / 60;
+        let seconds = total_secs % 60;
+        format!("{minutes}m {seconds}s")
+    }
+}
+
 fn pad_right(s: &str, width: usize) -> String {
     let len = s.chars().count();
     if len >= width {
@@ -142,5 +162,32 @@ impl io::Write for MpHandle {
     }
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_duration_under_100ms() {
+        assert_eq!(format_duration(0), "0ms");
+        assert_eq!(format_duration(42), "42ms");
+        assert_eq!(format_duration(99), "99ms");
+    }
+
+    #[test]
+    fn format_duration_seconds() {
+        assert_eq!(format_duration(100), "0.1s");
+        assert_eq!(format_duration(1_200), "1.2s");
+        assert_eq!(format_duration(9_585), "9.6s");
+        assert_eq!(format_duration(59_900), "59.9s");
+    }
+
+    #[test]
+    fn format_duration_minutes() {
+        assert_eq!(format_duration(60_000), "1m 0s");
+        assert_eq!(format_duration(135_000), "2m 15s");
+        assert_eq!(format_duration(3_600_000), "60m 0s");
     }
 }

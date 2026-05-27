@@ -9,7 +9,7 @@ use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
 
 use crate::config::{GitMaintenanceConfig, resolve_roots};
-use crate::ui::{self, CommandBar, TreeItem};
+use crate::ui::{self, CommandBar, TreeItem, format_duration};
 use crate::walk::{dir_size, find_dirs_with_marker};
 use humansize::{BINARY, format_size};
 
@@ -221,11 +221,12 @@ async fn maintain_one(
     };
 
     let elapsed_ms = started.elapsed().as_millis() as u64;
+    let elapsed = format_duration(elapsed_ms);
     let size_after = dir_size(&gitdir).await.unwrap_or(size_before);
 
     let (ok, detail) = if let Some((step, err)) = failure {
-        warn!("✗ {label}  {step}: {err} ({elapsed_ms}ms)");
-        (false, format!("{step}: {err} ({elapsed_ms}ms)"))
+        warn!("✗ {label}  {step}: {err} ({elapsed})");
+        (false, format!("{step}: {err} ({elapsed})"))
     } else {
         if size_after < size_before {
             total_freed.fetch_add(
@@ -240,8 +241,8 @@ async fn maintain_one(
             Some(s) if !s.is_empty() => format!("; fsck: {s}"),
             _ => String::new(),
         };
-        info!("✓ {label}  {delta_str} in {elapsed_ms}ms{fsck_suffix}");
-        (true, format!("{delta_str} in {elapsed_ms}ms{fsck_suffix}"))
+        info!("✓ {label}  {delta_str} in {elapsed}{fsck_suffix}");
+        (true, format!("{delta_str} in {elapsed}{fsck_suffix}"))
     };
 
     bar.inc(1);
