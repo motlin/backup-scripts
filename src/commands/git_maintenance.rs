@@ -113,6 +113,28 @@ pub async fn run(
         repos.sort();
         repos.dedup();
 
+        // Dedup by git common dir so linked worktrees of the same repo (which share
+        // the object database, packed-refs, reflogs, and commit-graph) only get one
+        // maintenance pass — running repack/prune on each would race on the shared
+        // packfiles and double-count freed bytes. Submodules have distinct common
+        // dirs and are preserved.
+        let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+        let mut deduped: Vec<PathBuf> = Vec::new();
+        for repo in repos {
+            match git_common_dir(&repo).await {
+                Some(common) => {
+                    if seen.insert(common) {
+                        deduped.push(repo);
+                    }
+                }
+                None => {
+                    warn!("could not resolve git common dir for {}", repo.display());
+                    deduped.push(repo);
+                }
+            }
+        }
+        let repos = deduped;
+
         info!(repos = repos.len(), submodules, "discovered git repos");
 
         if dry_run {
@@ -289,6 +311,26 @@ fn size_delta_str(before: u64, after: u64) -> String {
     } else {
         format!("no change ({})", format_size(before, BINARY))
     }
+}
+
+/// Resolve `repo`'s git common dir (the shared object store) via
+/// `git rev-parse --git-common-dir`. Linked worktrees of the same repo all return
+/// the same path here even though their per-worktree gitdirs differ; submodules
+/// return their own modules dir.
+async fn git_common_dir(repo: &std::path::Path) -> Option<PathBuf> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(["rev-parse", "--path-format=absolute", "--git-common-dir"])
+        .output()
+        .await
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    let path = PathBuf::from(stdout.trim());
+    Some(std::fs::canonicalize(&path).unwrap_or(path))
 }
 
 /// Resolve the actual `.git` directory, following the `gitdir: <path>` pointer for submodules.
