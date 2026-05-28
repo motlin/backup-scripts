@@ -1,5 +1,7 @@
 use anyhow::{Result, bail};
+use clap::Args as ClapArgs;
 use humansize::{BINARY, format_size};
+use std::collections::HashSet;
 use std::time::Instant;
 use tracing::{Instrument, info, info_span, warn};
 
@@ -44,12 +46,31 @@ struct StepResult {
     summary: CommandSummary,
 }
 
-pub async fn run(config: &AppConfig, dry_run: bool) -> Result<()> {
-    let steps: Vec<String> = config
+#[derive(ClapArgs, Debug, Default)]
+pub struct Args {
+    /// Skip a step (by name) from the resolved step list. Repeatable.
+    /// Names match `all.steps` entries, e.g. `git-maintenance`, `clean-tmp`.
+    #[arg(long = "skip")]
+    pub skip: Vec<String>,
+}
+
+pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
+    let mut steps: Vec<String> = config
         .all
         .steps
         .clone()
         .unwrap_or_else(|| DEFAULT_STEPS.iter().map(|s| s.to_string()).collect());
+
+    if !args.skip.is_empty() {
+        let known: HashSet<&str> = DEFAULT_STEPS.iter().copied().collect();
+        for name in &args.skip {
+            if !known.contains(name.as_str()) {
+                bail!("unknown step in --skip: {name}");
+            }
+        }
+        let skip: HashSet<&str> = args.skip.iter().map(String::as_str).collect();
+        steps.retain(|s| !skip.contains(s.as_str()));
+    }
 
     async move {
         let started = Instant::now();

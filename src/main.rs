@@ -21,7 +21,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Run all configured maintenance steps in `all.steps` order.
-    All,
+    All(commands::all::Args),
 
     /// Delete old Backblaze bz_done_*.dat files to reclaim disk space.
     BzCleanup(commands::bz_cleanup::Args),
@@ -118,7 +118,7 @@ async fn main() -> Result<()> {
     logging::init(&cfg.logging);
 
     match cli.command {
-        Command::All => commands::all::run(&cfg, cli.dry_run).await,
+        Command::All(args) => commands::all::run(args, &cfg, cli.dry_run).await,
         Command::BzCleanup(args) => commands::bz_cleanup::run(args, &cfg.bz_cleanup, cli.dry_run)
             .await
             .map(drop),
