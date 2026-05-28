@@ -11,7 +11,7 @@ use tracing::{Instrument, info, info_span, warn};
 use walkdir::WalkDir;
 
 use crate::config::{CleanNpmConfig, expand_tilde};
-use crate::ui::{self, CommandBar, TreeItem};
+use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
 use crate::walk::older_than_days;
 
 pub const DEFAULT_DAYS: u32 = 30;
@@ -82,6 +82,11 @@ pub async fn run(args: Args, cfg: &CleanNpmConfig, dry_run: bool) -> Result<()> 
         let bar = Arc::new(CommandBar::new("clean-npm", candidates.len() as u64));
 
         let cache_for_labels = Arc::new(cache_dir.clone());
+        let max_label = candidates
+            .iter()
+            .map(|p| entry_label(p, &cache_dir).chars().count())
+            .max()
+            .unwrap_or(0);
         let sem = Arc::new(Semaphore::new(concurrency.max(1)));
         let mut set: JoinSet<()> = JoinSet::new();
         for path in candidates {
@@ -91,16 +96,13 @@ pub async fn run(args: Args, cfg: &CleanNpmConfig, dry_run: bool) -> Result<()> 
             let bar = Arc::clone(&bar);
             let items = Arc::clone(&items);
             let cache_for_labels = Arc::clone(&cache_for_labels);
-            let label = path
-                .strip_prefix(cache_for_labels.as_path())
-                .unwrap_or(&path)
-                .display()
-                .to_string();
+            let label = entry_label(&path, &cache_dir);
             set.spawn(
                 async move {
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
                     clean_one(
                         path,
+                        max_label,
                         dry_run,
                         &total_bytes,
                         &total_count,
@@ -139,8 +141,17 @@ pub async fn run(args: Args, cfg: &CleanNpmConfig, dry_run: bool) -> Result<()> 
     Ok(())
 }
 
+fn entry_label(path: &std::path::Path, cache_dir: &std::path::Path) -> String {
+    path.strip_prefix(cache_dir)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn clean_one(
     path: PathBuf,
+    max_label: usize,
     dry_run: bool,
     total_bytes: &AtomicU64,
     total_count: &AtomicU64,
@@ -148,11 +159,8 @@ async fn clean_one(
     items: &Mutex<Vec<TreeItem>>,
     cache_dir: &std::path::Path,
 ) {
-    let label = path
-        .strip_prefix(cache_dir)
-        .unwrap_or(&path)
-        .display()
-        .to_string();
+    let label = entry_label(&path, cache_dir);
+    let padded = pad_right(&label, max_label);
 
     let started = Instant::now();
     let size = std::fs::metadata(&path).ok().map(|m| m.len()).unwrap_or(0);
@@ -160,26 +168,26 @@ async fn clean_one(
     let (ok, detail) = if dry_run {
         total_bytes.fetch_add(size, Ordering::Relaxed);
         total_count.fetch_add(1, Ordering::Relaxed);
-        let det = format!("would delete {}", format_size(size, BINARY));
-        info!("✓ {label}  {det}");
-        (true, det)
+        let detail = ItemDetail::dry_run("would delete", format_size(size, BINARY));
+        info!("✓ {padded}  {}", ui::format_detail(&detail));
+        (true, detail)
     } else {
         match tokio::fs::remove_file(&path).await {
             Ok(()) => {
                 total_bytes.fetch_add(size, Ordering::Relaxed);
                 total_count.fetch_add(1, Ordering::Relaxed);
-                let det = format!(
-                    "deleted {} in {}ms",
+                let detail = ItemDetail::success(
+                    "deleted",
                     format_size(size, BINARY),
-                    started.elapsed().as_millis()
+                    format_duration(started.elapsed().as_millis() as u64),
                 );
-                info!("✓ {label}  {det}");
-                (true, det)
+                info!("✓ {padded}  {}", ui::format_detail(&detail));
+                (true, detail)
             }
             Err(e) => {
-                let det = format!("failed: {e}");
-                warn!("✗ {label}  {det}");
-                (false, det)
+                let detail = ItemDetail::failure(format!("{e}"));
+                warn!("✗ {padded}  {}", ui::format_detail(&detail));
+                (false, detail)
             }
         }
     };

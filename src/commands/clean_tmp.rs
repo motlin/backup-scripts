@@ -11,7 +11,7 @@ use tracing::{Instrument, info, info_span, warn};
 use walkdir::WalkDir;
 
 use crate::config::{CleanTmpConfig, expand_tilde};
-use crate::ui::{self, CommandBar, TreeItem};
+use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
 use crate::walk::{dir_size, older_than_days};
 
 pub const DEFAULT_DAYS: u32 = 30;
@@ -81,6 +81,11 @@ pub async fn run(args: Args, cfg: &CleanTmpConfig, dry_run: bool) -> Result<()> 
         let items: Arc<Mutex<Vec<TreeItem>>> = Arc::new(Mutex::new(Vec::new()));
         let bar = Arc::new(CommandBar::new("clean-tmp", candidates.len() as u64));
 
+        let max_label = candidates
+            .iter()
+            .map(|p| p.display().to_string().chars().count())
+            .max()
+            .unwrap_or(0);
         let sem = Arc::new(Semaphore::new(concurrency.max(1)));
         let mut set: JoinSet<()> = JoinSet::new();
         for path in candidates {
@@ -92,7 +97,16 @@ pub async fn run(args: Args, cfg: &CleanTmpConfig, dry_run: bool) -> Result<()> 
             set.spawn(
                 async move {
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                    clean_one(path, dry_run, &total_bytes, &total_count, &bar, &items).await;
+                    clean_one(
+                        path,
+                        max_label,
+                        dry_run,
+                        &total_bytes,
+                        &total_count,
+                        &bar,
+                        &items,
+                    )
+                    .await;
                 }
                 .in_current_span(),
             );
@@ -121,6 +135,7 @@ pub async fn run(args: Args, cfg: &CleanTmpConfig, dry_run: bool) -> Result<()> 
 
 async fn clean_one(
     path: PathBuf,
+    max_label: usize,
     dry_run: bool,
     total_bytes: &AtomicU64,
     total_count: &AtomicU64,
@@ -128,6 +143,7 @@ async fn clean_one(
     items: &Mutex<Vec<TreeItem>>,
 ) {
     let label = path.display().to_string();
+    let padded = pad_right(&label, max_label);
 
     let started = Instant::now();
     let size = if path.is_dir() {
@@ -139,9 +155,9 @@ async fn clean_one(
     let (ok, detail) = if dry_run {
         total_bytes.fetch_add(size, Ordering::Relaxed);
         total_count.fetch_add(1, Ordering::Relaxed);
-        let det = format!("would delete {}", format_size(size, BINARY));
-        info!("✓ {label}  {det}");
-        (true, det)
+        let detail = ItemDetail::dry_run("would delete", format_size(size, BINARY));
+        info!("✓ {padded}  {}", ui::format_detail(&detail));
+        (true, detail)
     } else {
         let result = if path.is_dir() {
             tokio::fs::remove_dir_all(&path).await.map(|_| ())
@@ -153,18 +169,18 @@ async fn clean_one(
             Ok(()) => {
                 total_bytes.fetch_add(size, Ordering::Relaxed);
                 total_count.fetch_add(1, Ordering::Relaxed);
-                let det = format!(
-                    "deleted {} in {}ms",
+                let detail = ItemDetail::success(
+                    "deleted",
                     format_size(size, BINARY),
-                    started.elapsed().as_millis()
+                    format_duration(started.elapsed().as_millis() as u64),
                 );
-                info!("✓ {label}  {det}");
-                (true, det)
+                info!("✓ {padded}  {}", ui::format_detail(&detail));
+                (true, detail)
             }
             Err(e) => {
-                let det = format!("failed: {e}");
-                warn!("✗ {label}  {det}");
-                (false, det)
+                let detail = ItemDetail::failure(format!("{e}"));
+                warn!("✗ {padded}  {}", ui::format_detail(&detail));
+                (false, detail)
             }
         }
     };

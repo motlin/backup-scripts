@@ -9,7 +9,7 @@ use tokio::fs;
 use tracing::{Instrument, info, info_span, warn};
 
 use crate::config::CleanTrashConfig;
-use crate::ui::{self, CommandBar, TreeItem};
+use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
 use crate::walk::dir_size;
 
 #[derive(ClapArgs, Debug, Default)]
@@ -45,11 +45,18 @@ pub async fn run(_args: Args, _cfg: &CleanTrashConfig, dry_run: bool) -> Result<
         let total_count = AtomicU64::new(0);
         let items: Mutex<Vec<TreeItem>> = Mutex::new(Vec::new());
 
+        let max_label = entries
+            .iter()
+            .map(|p| entry_label(p, &trash).chars().count())
+            .max()
+            .unwrap_or(0);
+
         // Process serially. Concurrent rm operations on the same parent directory
         // do not parallelize well, and the per-entry filesystem operations are quick.
         for entry in entries {
             clean_one(
                 entry,
+                max_label,
                 dry_run,
                 &total_bytes,
                 &total_count,
@@ -109,8 +116,17 @@ fn read_trash_entries(trash: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(out)
 }
 
+fn entry_label(path: &Path, trash: &Path) -> String {
+    path.strip_prefix(trash)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn clean_one(
     path: PathBuf,
+    max_label: usize,
     dry_run: bool,
     total_bytes: &AtomicU64,
     total_count: &AtomicU64,
@@ -118,11 +134,8 @@ async fn clean_one(
     items: &Mutex<Vec<TreeItem>>,
     trash: &Path,
 ) {
-    let label = path
-        .strip_prefix(trash)
-        .unwrap_or(&path)
-        .display()
-        .to_string();
+    let label = entry_label(&path, trash);
+    let padded = pad_right(&label, max_label);
 
     let started = Instant::now();
     let is_dir = path.is_dir();
@@ -138,9 +151,9 @@ async fn clean_one(
     let (ok, detail) = if dry_run {
         total_bytes.fetch_add(size, Ordering::Relaxed);
         total_count.fetch_add(1, Ordering::Relaxed);
-        let det = format!("would delete {}", format_size(size, BINARY));
-        info!("✓ {label}  {det}");
-        (true, det)
+        let detail = ItemDetail::dry_run("would delete", format_size(size, BINARY));
+        info!("✓ {padded}  {}", ui::format_detail(&detail));
+        (true, detail)
     } else {
         let res = if is_dir {
             fs::remove_dir_all(&path).await
@@ -151,18 +164,18 @@ async fn clean_one(
             Ok(()) => {
                 total_bytes.fetch_add(size, Ordering::Relaxed);
                 total_count.fetch_add(1, Ordering::Relaxed);
-                let det = format!(
-                    "deleted {} in {}ms",
+                let detail = ItemDetail::success(
+                    "deleted",
                     format_size(size, BINARY),
-                    started.elapsed().as_millis()
+                    format_duration(started.elapsed().as_millis() as u64),
                 );
-                info!("✓ {label}  {det}");
-                (true, det)
+                info!("✓ {padded}  {}", ui::format_detail(&detail));
+                (true, detail)
             }
             Err(e) => {
-                let det = format!("failed: {e}");
-                warn!("✗ {label}  {det}");
-                (false, det)
+                let detail = ItemDetail::failure(format!("{e}"));
+                warn!("✗ {padded}  {}", ui::format_detail(&detail));
+                (false, detail)
             }
         }
     };

@@ -8,7 +8,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tracing::{Instrument, info, warn};
 
-use crate::ui::{self, CommandBar, TreeItem, format_duration};
+use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
 use crate::walk::{dir_size, find_dirs_with_marker, older_than_days};
 
 /// Caller is responsible for wrapping this future in its own `info_span!` (e.g.
@@ -55,6 +55,12 @@ pub async fn clean(
     let items: Arc<Mutex<Vec<TreeItem>>> = Arc::new(Mutex::new(Vec::new()));
     let bar = Arc::new(CommandBar::new(bar_label, candidates.len() as u64));
 
+    let max_label = candidates
+        .iter()
+        .map(|p| project_label(p).chars().count())
+        .max()
+        .unwrap_or(0);
+
     let sem = Arc::new(Semaphore::new(concurrency.max(1)));
     let mut set: JoinSet<()> = JoinSet::new();
     for project in candidates {
@@ -68,6 +74,7 @@ pub async fn clean(
                 let _permit = sem.acquire_owned().await.expect("semaphore closed");
                 clean_one(
                     project,
+                    max_label,
                     junk,
                     dry_run,
                     &total_bytes,
@@ -99,8 +106,17 @@ pub async fn clean(
     Ok(())
 }
 
+fn project_label(project: &std::path::Path) -> String {
+    project
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| project.display().to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn clean_one(
     project: PathBuf,
+    max_label: usize,
     junk: &str,
     dry_run: bool,
     total_bytes: &AtomicU64,
@@ -109,10 +125,8 @@ async fn clean_one(
     items: &Mutex<Vec<TreeItem>>,
 ) {
     let junk_path = project.join(junk);
-    let label = project
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| project.display().to_string());
+    let label = project_label(&project);
+    let padded = pad_right(&label, max_label);
 
     let started = Instant::now();
     let size = dir_size(&junk_path).await.unwrap_or(0);
@@ -120,26 +134,26 @@ async fn clean_one(
     let (ok, detail) = if dry_run {
         total_bytes.fetch_add(size, Ordering::Relaxed);
         total_count.fetch_add(1, Ordering::Relaxed);
-        let det = format!("would delete {}", format_size(size, BINARY));
-        info!("✓ {label}  {}", det);
-        (true, det)
+        let detail = ItemDetail::dry_run("would delete", format_size(size, BINARY));
+        info!("✓ {padded}  {}", ui::format_detail(&detail));
+        (true, detail)
     } else {
         match tokio::fs::remove_dir_all(&junk_path).await {
             Ok(()) => {
                 total_bytes.fetch_add(size, Ordering::Relaxed);
                 total_count.fetch_add(1, Ordering::Relaxed);
-                let det = format!(
-                    "deleted {} in {}",
+                let detail = ItemDetail::success(
+                    "deleted",
                     format_size(size, BINARY),
-                    format_duration(started.elapsed().as_millis() as u64)
+                    format_duration(started.elapsed().as_millis() as u64),
                 );
-                info!("✓ {label}  {}", det);
-                (true, det)
+                info!("✓ {padded}  {}", ui::format_detail(&detail));
+                (true, detail)
             }
             Err(e) => {
-                let det = format!("failed: {e}");
-                warn!("✗ {label}  {}", det);
-                (false, det)
+                let detail = ItemDetail::failure(format!("{e}"));
+                warn!("✗ {padded}  {}", ui::format_detail(&detail));
+                (false, detail)
             }
         }
     };

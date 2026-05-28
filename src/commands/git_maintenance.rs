@@ -9,7 +9,7 @@ use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
 
 use crate::config::{GitMaintenanceConfig, resolve_roots};
-use crate::ui::{self, CommandBar, TreeItem, format_duration};
+use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
 use crate::walk::{dir_size, find_dirs_with_marker};
 use humansize::{BINARY, format_size};
 
@@ -152,6 +152,12 @@ pub async fn run(
         let items: Arc<Mutex<Vec<TreeItem>>> = Arc::new(Mutex::new(Vec::new()));
         let total_freed = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
+        let max_label = repos
+            .iter()
+            .map(|r| repo_label(r).chars().count())
+            .max()
+            .unwrap_or(0);
+
         let sem = Arc::new(Semaphore::new(concurrency.max(1)));
         let mut set: JoinSet<()> = JoinSet::new();
         for repo in repos {
@@ -162,7 +168,7 @@ pub async fn run(
             set.spawn(
                 async move {
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                    maintain_one(repo, &bar, &items, &total_freed, fsck).await;
+                    maintain_one(repo, max_label, &bar, &items, &total_freed, fsck).await;
                 }
                 .in_current_span(),
             );
@@ -195,17 +201,22 @@ pub async fn run(
     .await
 }
 
+fn repo_label(repo: &std::path::Path) -> String {
+    repo.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| repo.display().to_string())
+}
+
 async fn maintain_one(
     repo: PathBuf,
+    max_label: usize,
     bar: &CommandBar,
     items: &Mutex<Vec<TreeItem>>,
     total_freed: &std::sync::atomic::AtomicU64,
     fsck: bool,
 ) {
-    let label = repo
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| repo.display().to_string());
+    let label = repo_label(&repo);
+    let padded = pad_right(&label, max_label);
 
     let gitdir = resolve_gitdir(&repo);
     let size_before = dir_size(&gitdir).await.unwrap_or(0);
@@ -247,8 +258,10 @@ async fn maintain_one(
     let size_after = dir_size(&gitdir).await.unwrap_or(size_before);
 
     let (ok, detail) = if let Some((step, err)) = failure {
-        warn!("✗ {label}  {step}: {err} ({elapsed})");
-        (false, format!("{step}: {err} ({elapsed})"))
+        let suffix = format!("{step}: {err} ({elapsed})");
+        let detail = ItemDetail::failure(suffix);
+        warn!("✗ {padded}  {}", ui::format_detail(&detail));
+        (false, detail)
     } else {
         if size_after < size_before {
             total_freed.fetch_add(
@@ -256,15 +269,19 @@ async fn maintain_one(
                 std::sync::atomic::Ordering::Relaxed,
             );
         }
-        let delta_str = size_delta_str(size_before, size_after);
+        let (verb, size_str) = delta_components(size_before, size_after);
         let bar_freed = total_freed.load(std::sync::atomic::Ordering::Relaxed);
         bar.set_message(format!("{} freed", format_size(bar_freed, BINARY)));
         let fsck_suffix = match &fsck_summary {
             Some(s) if !s.is_empty() => format!("; fsck: {s}"),
             _ => String::new(),
         };
-        info!("✓ {label}  {delta_str} in {elapsed}{fsck_suffix}");
-        (true, format!("{delta_str} in {elapsed}{fsck_suffix}"))
+        let mut detail = ItemDetail::success(verb, size_str, &elapsed);
+        if !fsck_suffix.is_empty() {
+            detail = detail.with_suffix(fsck_suffix);
+        }
+        info!("✓ {padded}  {}", ui::format_detail(&detail));
+        (true, detail)
     };
 
     bar.inc(1);
@@ -303,13 +320,13 @@ async fn run_fsck(repo: &std::path::Path) -> String {
         .join(", ")
 }
 
-fn size_delta_str(before: u64, after: u64) -> String {
+fn delta_components(before: u64, after: u64) -> (&'static str, String) {
     if after < before {
-        format!("freed {}", format_size(before - after, BINARY))
+        ("freed", format_size(before - after, BINARY))
     } else if after > before {
-        format!("+{}", format_size(after - before, BINARY))
+        ("+", format_size(after - before, BINARY))
     } else {
-        format!("no change ({})", format_size(before, BINARY))
+        ("no change", format_size(before, BINARY))
     }
 }
 

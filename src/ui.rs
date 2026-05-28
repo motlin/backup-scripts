@@ -95,8 +95,86 @@ pub fn print_tree(header: &str, items: &[TreeItem]) {
         };
         let icon = if item.ok { "✓" } else { "✗" };
         let label = pad_right(&item.label, max_label);
-        let _ = mp().println(format!("  {branch} {icon} {label}  {}", item.detail));
+        let detail = format_detail(&item.detail);
+        let _ = mp().println(format!("  {branch} {icon} {label}  {detail}"));
     }
+}
+
+/// Widths chosen so the widest expected value fits without wrapping:
+/// `"would delete"` (12), `"164.54 MiB"` (10), `"2m 15s"` (6 — rounded up to 7).
+pub const VERB_COL_WIDTH: usize = 12;
+pub const SIZE_COL_WIDTH: usize = 10;
+pub const DURATION_COL_WIDTH: usize = 7;
+
+#[derive(Debug, Clone)]
+pub struct ItemDetail {
+    pub verb: String,
+    pub size: Option<String>,
+    pub duration: Option<String>,
+    pub suffix: Option<String>,
+}
+
+impl ItemDetail {
+    pub fn success(
+        verb: impl Into<String>,
+        size: impl Into<String>,
+        duration: impl Into<String>,
+    ) -> Self {
+        Self {
+            verb: verb.into(),
+            size: Some(size.into()),
+            duration: Some(duration.into()),
+            suffix: None,
+        }
+    }
+
+    pub fn dry_run(verb: impl Into<String>, size: impl Into<String>) -> Self {
+        Self {
+            verb: verb.into(),
+            size: Some(size.into()),
+            duration: None,
+            suffix: None,
+        }
+    }
+
+    pub fn failure(suffix: impl Into<String>) -> Self {
+        Self {
+            verb: "failed".to_string(),
+            size: None,
+            duration: None,
+            suffix: Some(suffix.into()),
+        }
+    }
+
+    pub fn with_suffix(mut self, suffix: impl Into<String>) -> Self {
+        self.suffix = Some(suffix.into());
+        self
+    }
+}
+
+/// Render a detail in aligned columns: `<verb> <size> in <duration><suffix>`.
+/// Missing size or duration are rendered as blank padding so subsequent columns
+/// still line up. Failure (no size, no duration) is rendered as `<verb> <suffix>`.
+pub fn format_detail(d: &ItemDetail) -> String {
+    let verb = pad_right(&d.verb, VERB_COL_WIDTH);
+
+    if d.size.is_none() && d.duration.is_none() {
+        return match &d.suffix {
+            Some(s) => format!("{verb} {s}"),
+            None => verb,
+        };
+    }
+
+    let size = pad_right(d.size.as_deref().unwrap_or(""), SIZE_COL_WIDTH);
+
+    let tail = match &d.duration {
+        Some(dur) => format!(" in {}", pad_right(dur, DURATION_COL_WIDTH)),
+        None => " ".repeat(DURATION_COL_WIDTH + 4),
+    };
+
+    let suffix = d.suffix.as_deref().unwrap_or("");
+    let s = format!("{verb} {size}{tail}{suffix}");
+    s.trim_end().to_string()
 }
 
 /// Format an elapsed duration in milliseconds as a human-readable string.
@@ -119,7 +197,7 @@ pub fn format_duration(ms: u64) -> String {
     }
 }
 
-fn pad_right(s: &str, width: usize) -> String {
+pub fn pad_right(s: &str, width: usize) -> String {
     let len = s.chars().count();
     if len >= width {
         s.to_string()
@@ -133,7 +211,7 @@ fn pad_right(s: &str, width: usize) -> String {
 #[derive(Debug)]
 pub struct TreeItem {
     pub label: String,
-    pub detail: String,
+    pub detail: ItemDetail,
     pub ok: bool,
 }
 
@@ -189,5 +267,57 @@ mod tests {
         assert_eq!(format_duration(60_000), "1m 0s");
         assert_eq!(format_duration(135_000), "2m 15s");
         assert_eq!(format_duration(3_600_000), "60m 0s");
+    }
+
+    #[test]
+    fn format_detail_success() {
+        let d = ItemDetail::success("freed", "4 KiB", "2.1s");
+        assert_eq!(format_detail(&d), "freed        4 KiB      in 2.1s");
+    }
+
+    #[test]
+    fn format_detail_no_change_aligns_with_freed() {
+        let no_change = format_detail(&ItemDetail::success("no change", "124 KiB", "1.1s"));
+        let freed = format_detail(&ItemDetail::success("freed", "4 KiB", "2.1s"));
+        let big = format_detail(&ItemDetail::success("no change", "164.54 MiB", "1.2s"));
+        let no_change_in = no_change.find(" in ").unwrap();
+        let freed_in = freed.find(" in ").unwrap();
+        let big_in = big.find(" in ").unwrap();
+        assert_eq!(no_change_in, freed_in);
+        assert_eq!(no_change_in, big_in);
+    }
+
+    #[test]
+    fn format_detail_dry_run_drops_duration() {
+        let d = ItemDetail::dry_run("would delete", "1 KiB");
+        let s = format_detail(&d);
+        assert!(!s.contains(" in "));
+        assert!(s.starts_with("would delete "));
+        assert!(s.contains("1 KiB"));
+    }
+
+    #[test]
+    fn format_detail_failure_renders_suffix() {
+        let d = ItemDetail::failure("permission denied (os error 13)");
+        let s = format_detail(&d);
+        assert_eq!(s, "failed       permission denied (os error 13)");
+        assert!(!s.contains(" in "));
+    }
+
+    #[test]
+    fn format_detail_plus_verb() {
+        let d = ItemDetail::success("+", "4 KiB", "1.0s");
+        let s = format_detail(&d);
+        assert!(s.starts_with("+           "));
+        assert!(s.contains("4 KiB"));
+        assert!(s.contains("in 1.0s"));
+    }
+
+    #[test]
+    fn format_detail_with_fsck_suffix() {
+        let d = ItemDetail::success("freed", "4 KiB", "2.1s").with_suffix("; fsck: 3 dangling");
+        let s = format_detail(&d);
+        assert!(s.ends_with("; fsck: 3 dangling"));
+        assert!(s.contains("in 2.1s"));
     }
 }
