@@ -5,6 +5,7 @@ use std::time::Instant;
 use tokio::process::Command;
 use tracing::{Instrument, info, info_span, warn};
 
+use super::CommandSummary;
 use crate::config::CleanBrewConfig;
 
 pub const DEFAULT_PRUNE: &str = "all";
@@ -17,7 +18,7 @@ pub struct Args {
     prune: Option<String>,
 }
 
-pub async fn run(args: Args, cfg: &CleanBrewConfig, dry_run: bool) -> Result<()> {
+pub async fn run(args: Args, cfg: &CleanBrewConfig, dry_run: bool) -> Result<CommandSummary> {
     let prune = args
         .prune
         .or_else(|| cfg.prune.clone())
@@ -27,7 +28,7 @@ pub async fn run(args: Args, cfg: &CleanBrewConfig, dry_run: bool) -> Result<()>
     async move {
         if !brew_available().await {
             info!("brew not on PATH — skipping");
-            return Ok(());
+            return Ok(CommandSummary::default());
         }
 
         run_brew_cleanup(&prune, dry_run).await
@@ -42,7 +43,7 @@ async fn brew_available() -> bool {
     matches!(output, Ok(out) if out.status.success())
 }
 
-async fn run_brew_cleanup(prune: &str, dry_run: bool) -> Result<()> {
+async fn run_brew_cleanup(prune: &str, dry_run: bool) -> Result<CommandSummary> {
     let started = Instant::now();
     let prune_arg = format!("--prune={prune}");
     let mut cmd = Command::new("brew");
@@ -62,11 +63,12 @@ async fn run_brew_cleanup(prune: &str, dry_run: bool) -> Result<()> {
             stderr = %String::from_utf8_lossy(&output.stderr).trim(),
             "brew cleanup failed"
         );
-        return Ok(());
+        return Ok(CommandSummary::failed_one());
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let freed_str = parse_freed_bytes(&stdout)
+    let freed = parse_freed_bytes(&stdout);
+    let freed_str = freed
         .map(|b| format_size(b, BINARY))
         .unwrap_or_else(|| "unknown".to_string());
     let elapsed_ms = started.elapsed().as_millis() as u64;
@@ -76,7 +78,7 @@ async fn run_brew_cleanup(prune: &str, dry_run: bool) -> Result<()> {
     } else {
         info!(elapsed_ms, "brew cleanup freed {freed_str}");
     }
-    Ok(())
+    Ok(CommandSummary::ok_one_with_bytes(freed.unwrap_or(0)))
 }
 
 /// Parse the "This operation has freed approximately X of disk space." line

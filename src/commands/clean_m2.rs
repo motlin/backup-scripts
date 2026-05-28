@@ -11,6 +11,7 @@ use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
 use walkdir::WalkDir;
 
+use super::CommandSummary;
 use crate::config::{CleanM2Config, expand_tilde};
 use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
 use crate::walk::{dir_size, older_than_days};
@@ -42,7 +43,7 @@ pub struct Args {
     marker_extension: Option<String>,
 }
 
-pub async fn run(args: Args, cfg: &CleanM2Config, dry_run: bool) -> Result<()> {
+pub async fn run(args: Args, cfg: &CleanM2Config, dry_run: bool) -> Result<CommandSummary> {
     let repo = args
         .repo
         .or_else(|| cfg.repo.clone())
@@ -62,7 +63,7 @@ pub async fn run(args: Args, cfg: &CleanM2Config, dry_run: bool) -> Result<()> {
     async move {
         if !repo.exists() {
             warn!("m2 repository does not exist: {}", repo.display());
-            return Ok(());
+            return Ok(CommandSummary::default());
         }
 
         let version_dirs = find_version_dirs(&repo, snapshots_only, &marker_extension);
@@ -76,7 +77,7 @@ pub async fn run(args: Args, cfg: &CleanM2Config, dry_run: bool) -> Result<()> {
         info!(after_mtime_filter = candidates.len(), "after --days filter");
 
         if candidates.is_empty() {
-            return Ok(());
+            return Ok(CommandSummary::default());
         }
 
         let total_bytes = Arc::new(AtomicU64::new(0));
@@ -131,9 +132,15 @@ pub async fn run(args: Args, cfg: &CleanM2Config, dry_run: bool) -> Result<()> {
             .unwrap_or_else(|_| panic!("items arc leaked"))
             .into_inner()
             .unwrap_or_default();
+        let items_ok = items.iter().filter(|i| i.ok).count() as u64;
+        let items_failed = items.len() as u64 - items_ok;
         ui::print_tree(&format!("clean-m2: {summary}"), &items);
 
-        Ok(())
+        Ok(CommandSummary {
+            bytes_freed: bytes,
+            items_ok,
+            items_failed,
+        })
     }
     .instrument(info_span!("clean-m2", snapshots_only, days,))
     .await

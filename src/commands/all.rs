@@ -1,13 +1,16 @@
 use anyhow::{Result, bail};
-use tracing::{Instrument, info_span, warn};
+use humansize::{BINARY, format_size};
+use std::time::Instant;
+use tracing::{Instrument, info, info_span, warn};
 
 use crate::config::AppConfig;
+use crate::ui::format_duration;
 
 use super::{
-    bz_cleanup, clean_brew, clean_cargo, clean_cocoapods, clean_cypress, clean_docker,
-    clean_go_build, clean_gradle, clean_jetbrains, clean_m2, clean_maven, clean_node,
-    clean_node_gyp, clean_npm, clean_pip, clean_playwright, clean_pnpm, clean_tmp, clean_trash,
-    clean_xcode, clean_yarn, git_maintenance,
+    CommandSummary, bz_cleanup, clean_brew, clean_cargo, clean_cocoapods, clean_cypress,
+    clean_docker, clean_go_build, clean_gradle, clean_jetbrains, clean_library_caches, clean_m2,
+    clean_maven, clean_node, clean_node_gyp, clean_npm, clean_pip, clean_playwright, clean_pnpm,
+    clean_tmp, clean_trash, clean_xcode, clean_yarn, git_maintenance,
 };
 
 pub const DEFAULT_STEPS: &[&str] = &[
@@ -28,12 +31,18 @@ pub const DEFAULT_STEPS: &[&str] = &[
     "clean-cocoapods",
     "clean-go-build",
     "clean-jetbrains",
+    "clean-library-caches",
     "clean-playwright",
     "clean-cypress",
     "clean-node-gyp",
     "clean-trash",
     "bz-cleanup",
 ];
+
+struct StepResult {
+    name: String,
+    summary: CommandSummary,
+}
 
 pub async fn run(config: &AppConfig, dry_run: bool) -> Result<()> {
     let steps: Vec<String> = config
@@ -43,8 +52,11 @@ pub async fn run(config: &AppConfig, dry_run: bool) -> Result<()> {
         .unwrap_or_else(|| DEFAULT_STEPS.iter().map(|s| s.to_string()).collect());
 
     async move {
+        let started = Instant::now();
+        let mut results: Vec<StepResult> = Vec::with_capacity(steps.len());
+
         for step in &steps {
-            match step.as_str() {
+            let summary = match step.as_str() {
                 "git-maintenance" => {
                     git_maintenance::run(
                         git_maintenance::Args::default(),
@@ -145,6 +157,14 @@ pub async fn run(config: &AppConfig, dry_run: bool) -> Result<()> {
                     )
                     .await?
                 }
+                "clean-library-caches" => {
+                    clean_library_caches::run(
+                        clean_library_caches::Args::default(),
+                        &config.clean_library_caches,
+                        dry_run,
+                    )
+                    .await?
+                }
                 "clean-playwright" => {
                     clean_playwright::run(
                         clean_playwright::Args::default(),
@@ -176,13 +196,59 @@ pub async fn run(config: &AppConfig, dry_run: bool) -> Result<()> {
                 unknown => {
                     bail!("unknown step in `all.steps`: {unknown}");
                 }
-            }
+            };
+
+            results.push(StepResult {
+                name: step.clone(),
+                summary,
+            });
         }
+
         if steps.is_empty() {
             warn!("`all.steps` is empty — nothing to do");
+            return Ok(());
         }
+
+        print_aggregate_summary(&results, started.elapsed());
         Ok(())
     }
     .instrument(info_span!("all"))
     .await
+}
+
+fn print_aggregate_summary(results: &[StepResult], elapsed: std::time::Duration) {
+    let mut total = CommandSummary::default();
+    let mut passed = 0u64;
+    let mut failed = 0u64;
+    for r in results {
+        total.merge(r.summary);
+        if r.summary.passed() {
+            passed += 1;
+        } else {
+            failed += 1;
+        }
+    }
+
+    info!("all: per-command results:");
+    let max_name = results
+        .iter()
+        .map(|r| r.name.chars().count())
+        .max()
+        .unwrap_or(0);
+    for r in results {
+        let status = if r.summary.passed() { "ok " } else { "FAIL" };
+        let padded = format!("{:<width$}", r.name, width = max_name);
+        info!(
+            "  [{status}] {padded}  {:>10}  ({} ok, {} failed)",
+            format_size(r.summary.bytes_freed, BINARY),
+            r.summary.items_ok,
+            r.summary.items_failed,
+        );
+    }
+    info!(
+        "all: {passed} passed, {failed} failed, {} freed across {} items in {}",
+        format_size(total.bytes_freed, BINARY),
+        total.items_total(),
+        format_duration(elapsed.as_millis() as u64),
+    );
 }

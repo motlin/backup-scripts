@@ -5,7 +5,7 @@ use tracing::{Instrument, info_span};
 
 use crate::config::{CleanMavenConfig, resolve_roots};
 
-use super::cleaner;
+use super::{CommandSummary, cleaner};
 
 pub const DEFAULT_DEPTH: usize = 4;
 pub const DEFAULT_DAYS: u32 = 14;
@@ -35,7 +35,7 @@ pub async fn run(
     cfg: &CleanMavenConfig,
     global_roots: &Option<Vec<PathBuf>>,
     dry_run: bool,
-) -> Result<()> {
+) -> Result<CommandSummary> {
     let depth = args.depth.or(cfg.depth).unwrap_or(DEFAULT_DEPTH);
     let days = args.days.or(cfg.days).unwrap_or(DEFAULT_DAYS);
     let concurrency = args

@@ -6,6 +6,7 @@ use std::time::Instant;
 use tokio::process::Command;
 use tracing::{Instrument, info, info_span, warn};
 
+use super::CommandSummary;
 use crate::config::{BzCleanupConfig, expand_tilde};
 use crate::ui;
 
@@ -36,7 +37,7 @@ pub struct Args {
     no_sudo: bool,
 }
 
-pub async fn run(args: Args, cfg: &BzCleanupConfig, dry_run: bool) -> Result<()> {
+pub async fn run(args: Args, cfg: &BzCleanupConfig, dry_run: bool) -> Result<CommandSummary> {
     let days = args.days.or(cfg.days).unwrap_or(DEFAULT_DAYS);
     let dir = args
         .dir
@@ -71,7 +72,7 @@ pub async fn run(args: Args, cfg: &BzCleanupConfig, dry_run: bool) -> Result<()>
 
         if scan.count == 0 {
             info!("nothing to delete");
-            return Ok(());
+            return Ok(CommandSummary::default());
         }
 
         if dry_run {
@@ -80,11 +81,19 @@ pub async fn run(args: Args, cfg: &BzCleanupConfig, dry_run: bool) -> Result<()>
                 scan.count,
                 format_size(scan.bytes, BINARY)
             );
-            return Ok(());
+            return Ok(CommandSummary {
+                bytes_freed: scan.bytes,
+                items_ok: scan.count,
+                items_failed: 0,
+            });
         }
 
         delete(&dir, days, &pattern, mode, scan.count, scan.bytes).await?;
-        Ok(())
+        Ok(CommandSummary {
+            bytes_freed: scan.bytes,
+            items_ok: scan.count,
+            items_failed: 0,
+        })
     }
     .instrument(info_span!("bz-cleanup", days))
     .await

@@ -8,6 +8,7 @@ use std::time::Instant;
 use tokio::fs;
 use tracing::{Instrument, info, info_span, warn};
 
+use super::CommandSummary;
 use crate::config::CleanTrashConfig;
 use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
 use crate::walk::dir_size;
@@ -15,7 +16,7 @@ use crate::walk::dir_size;
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {}
 
-pub async fn run(_args: Args, _cfg: &CleanTrashConfig, dry_run: bool) -> Result<()> {
+pub async fn run(_args: Args, _cfg: &CleanTrashConfig, dry_run: bool) -> Result<CommandSummary> {
     let trash = default_trash_dir();
 
     let result = async move {
@@ -90,15 +91,23 @@ pub async fn run(_args: Args, _cfg: &CleanTrashConfig, dry_run: bool) -> Result<
         bar.finish_ok(summary.clone());
 
         let items = items.into_inner().unwrap_or_default();
-        Ok::<_, anyhow::Error>(Some((summary, items)))
+        Ok::<_, anyhow::Error>(Some((summary, items, measured)))
     }
     .instrument(info_span!("clean-trash"))
     .await?;
 
-    if let Some((summary, items)) = result {
+    if let Some((summary, items, bytes)) = result {
+        let items_ok = items.iter().filter(|i| i.ok).count() as u64;
+        let items_failed = items.len() as u64 - items_ok;
         ui::print_tree(&format!("clean-trash: {summary}"), &items);
+        Ok(CommandSummary {
+            bytes_freed: bytes,
+            items_ok,
+            items_failed,
+        })
+    } else {
+        Ok(CommandSummary::default())
     }
-    Ok(())
 }
 
 /// Read direct entries of the Trash directory, skipping `.DS_Store` which macOS

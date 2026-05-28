@@ -8,6 +8,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tracing::{Instrument, info, warn};
 
+use super::CommandSummary;
 use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
 use crate::walk::{dir_size, find_dirs_with_marker, older_than_days};
 
@@ -24,7 +25,7 @@ pub async fn clean(
     days: u32,
     concurrency: usize,
     dry_run: bool,
-) -> Result<()> {
+) -> Result<CommandSummary> {
     let mut projects: Vec<PathBuf> = Vec::new();
     for root in &roots {
         if !root.exists() {
@@ -47,7 +48,7 @@ pub async fn clean(
     info!(found = candidates.len(), "candidates");
 
     if candidates.is_empty() {
-        return Ok(());
+        return Ok(CommandSummary::default());
     }
 
     let total_bytes = Arc::new(AtomicU64::new(0));
@@ -101,9 +102,15 @@ pub async fn clean(
         .unwrap_or_else(|_| panic!("items arc leaked"))
         .into_inner()
         .unwrap_or_default();
+    let items_ok = items.iter().filter(|i| i.ok).count() as u64;
+    let items_failed = items.len() as u64 - items_ok;
     ui::print_tree(&format!("{bar_label}: {summary}"), &items);
 
-    Ok(())
+    Ok(CommandSummary {
+        bytes_freed: bytes,
+        items_ok,
+        items_failed,
+    })
 }
 
 fn project_label(project: &std::path::Path) -> String {

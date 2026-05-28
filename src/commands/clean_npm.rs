@@ -10,6 +10,7 @@ use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
 use walkdir::WalkDir;
 
+use super::CommandSummary;
 use crate::config::{CleanNpmConfig, expand_tilde};
 use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
 use crate::walk::older_than_days;
@@ -32,7 +33,7 @@ pub struct Args {
     pub concurrency: Option<usize>,
 }
 
-pub async fn run(args: Args, cfg: &CleanNpmConfig, dry_run: bool) -> Result<()> {
+pub async fn run(args: Args, cfg: &CleanNpmConfig, dry_run: bool) -> Result<CommandSummary> {
     let cache_dir = args
         .cache_dir
         .or_else(|| cfg.cache_dir.clone())
@@ -130,15 +131,23 @@ pub async fn run(args: Args, cfg: &CleanNpmConfig, dry_run: bool) -> Result<()> 
             .into_inner()
             .unwrap_or_default();
 
-        Ok::<_, anyhow::Error>(Some((summary, items)))
+        Ok::<_, anyhow::Error>(Some((summary, items, bytes)))
     }
     .instrument(info_span!("clean-npm", days))
     .await?;
 
-    if let Some((summary, items)) = result {
+    if let Some((summary, items, bytes)) = result {
+        let items_ok = items.iter().filter(|i| i.ok).count() as u64;
+        let items_failed = items.len() as u64 - items_ok;
         ui::print_tree(&format!("clean-npm: {summary}"), &items);
+        Ok(CommandSummary {
+            bytes_freed: bytes,
+            items_ok,
+            items_failed,
+        })
+    } else {
+        Ok(CommandSummary::default())
     }
-    Ok(())
 }
 
 fn entry_label(path: &std::path::Path, cache_dir: &std::path::Path) -> String {

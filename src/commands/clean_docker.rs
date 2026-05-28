@@ -5,6 +5,7 @@ use std::time::Instant;
 use tokio::process::Command;
 use tracing::{Instrument, info, info_span, warn};
 
+use super::CommandSummary;
 use crate::config::CleanDockerConfig;
 
 pub const DEFAULT_HOURS: u32 = 720;
@@ -22,7 +23,7 @@ pub struct Args {
     scope: Option<String>,
 }
 
-pub async fn run(args: Args, cfg: &CleanDockerConfig, dry_run: bool) -> Result<()> {
+pub async fn run(args: Args, cfg: &CleanDockerConfig, dry_run: bool) -> Result<CommandSummary> {
     let hours = args.hours.or(cfg.hours).unwrap_or(DEFAULT_HOURS);
     let scope = args
         .scope
@@ -33,20 +34,19 @@ pub async fn run(args: Args, cfg: &CleanDockerConfig, dry_run: bool) -> Result<(
     async move {
         if !docker_available().await {
             info!("docker CLI not installed or daemon not running — skipping");
-            return Ok(());
+            return Ok(CommandSummary::default());
         }
 
         if scope != "system" {
             warn!(scope = %scope, "unsupported scope; only \"system\" is implemented");
-            return Ok(());
+            return Ok(CommandSummary::failed_one());
         }
 
         if dry_run {
-            run_df().await?;
+            run_df().await
         } else {
-            run_prune(hours).await?;
+            run_prune(hours).await
         }
-        Ok(())
     }
     .instrument(span)
     .await
@@ -66,7 +66,7 @@ async fn docker_available() -> bool {
     matches!(output, Ok(out) if out.status.success())
 }
 
-async fn run_df() -> Result<()> {
+async fn run_df() -> Result<CommandSummary> {
     let started = Instant::now();
     let output = Command::new("docker")
         .arg("system")
@@ -81,7 +81,7 @@ async fn run_df() -> Result<()> {
             stderr = %String::from_utf8_lossy(&output.stderr).trim(),
             "docker system df failed"
         );
-        return Ok(());
+        return Ok(CommandSummary::failed_one());
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -98,10 +98,10 @@ async fn run_df() -> Result<()> {
         elapsed_ms = started.elapsed().as_millis() as u64,
         "dry run: would prune objects shown above"
     );
-    Ok(())
+    Ok(CommandSummary::ok_one_with_bytes(reclaimable.unwrap_or(0)))
 }
 
-async fn run_prune(hours: u32) -> Result<()> {
+async fn run_prune(hours: u32) -> Result<CommandSummary> {
     let started = Instant::now();
     let filter = format!("until={hours}h");
     let output = Command::new("docker")
@@ -120,7 +120,7 @@ async fn run_prune(hours: u32) -> Result<()> {
             stderr = %String::from_utf8_lossy(&output.stderr).trim(),
             "docker system prune failed"
         );
-        return Ok(());
+        return Ok(CommandSummary::failed_one());
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -134,7 +134,7 @@ async fn run_prune(hours: u32) -> Result<()> {
         elapsed_ms = started.elapsed().as_millis() as u64,
         "pruned"
     );
-    Ok(())
+    Ok(CommandSummary::ok_one_with_bytes(reclaimed.unwrap_or(0)))
 }
 
 /// Parse the `Total reclaimed space: X.YGB` line from `docker system prune` output.

@@ -8,6 +8,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
 
+use super::CommandSummary;
 use crate::config::{GitMaintenanceConfig, resolve_roots};
 use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
 use crate::walk::{dir_size, find_dirs_with_marker};
@@ -83,7 +84,7 @@ pub async fn run(
     cfg: &GitMaintenanceConfig,
     global_roots: &Option<Vec<PathBuf>>,
     dry_run: bool,
-) -> Result<()> {
+) -> Result<CommandSummary> {
     let depth = args.depth.or(cfg.depth).unwrap_or(DEFAULT_DEPTH);
     let concurrency = args
         .concurrency
@@ -141,11 +142,14 @@ pub async fn run(
             for repo in &repos {
                 info!("would maintain {}", repo.display());
             }
-            return Ok(());
+            return Ok(CommandSummary {
+                items_ok: repos.len() as u64,
+                ..CommandSummary::default()
+            });
         }
 
         if repos.is_empty() {
-            return Ok(());
+            return Ok(CommandSummary::default());
         }
 
         let bar = Arc::new(CommandBar::new("git-maintenance", repos.len() as u64));
@@ -195,7 +199,11 @@ pub async fn run(
         }
         ui::print_tree(&format!("git-maintenance: {summary}"), &items);
 
-        Ok(())
+        Ok(CommandSummary {
+            bytes_freed: freed,
+            items_ok: ok_count as u64,
+            items_failed: fail_count as u64,
+        })
     }
     .instrument(info_span!("git-maintenance"))
     .await

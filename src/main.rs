@@ -85,6 +85,11 @@ enum Command {
     /// the relevant IDEs before running to avoid index corruption.
     CleanJetbrains(commands::clean_jetbrains::Args),
 
+    /// Scrub a configurable list of `~/Library/Caches` subdirs (Chrome, Spotify,
+    /// Steam, IINA, app updaters, virtualenv, bazelisk, typescript, …). Removes
+    /// each path's contents but keeps the parent dir intact.
+    CleanLibraryCaches(commands::clean_library_caches::Args),
+
     /// Delete stale Playwright browser-version dirs (~/Library/Caches/ms-playwright/*).
     CleanPlaywright(commands::clean_playwright::Args),
 
@@ -114,70 +119,104 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Command::All => commands::all::run(&cfg, cli.dry_run).await,
-        Command::BzCleanup(args) => {
-            commands::bz_cleanup::run(args, &cfg.bz_cleanup, cli.dry_run).await
-        }
+        Command::BzCleanup(args) => commands::bz_cleanup::run(args, &cfg.bz_cleanup, cli.dry_run)
+            .await
+            .map(drop),
         Command::GitMaintenance(args) => {
             commands::git_maintenance::run(args, &cfg.git_maintenance, &cfg.roots, cli.dry_run)
                 .await
+                .map(drop)
         }
         Command::CleanMaven(args) => {
-            commands::clean_maven::run(args, &cfg.clean_maven, &cfg.roots, cli.dry_run).await
+            commands::clean_maven::run(args, &cfg.clean_maven, &cfg.roots, cli.dry_run)
+                .await
+                .map(drop)
         }
         Command::CleanNode(args) => {
-            commands::clean_node::run(args, &cfg.clean_node, &cfg.roots, cli.dry_run).await
+            commands::clean_node::run(args, &cfg.clean_node, &cfg.roots, cli.dry_run)
+                .await
+                .map(drop)
         }
         Command::CleanCargo(args) => {
-            commands::clean_cargo::run(args, &cfg.clean_cargo, &cfg.roots, cli.dry_run).await
+            commands::clean_cargo::run(args, &cfg.clean_cargo, &cfg.roots, cli.dry_run)
+                .await
+                .map(drop)
         }
-        Command::CleanM2(args) => commands::clean_m2::run(args, &cfg.clean_m2, cli.dry_run).await,
+        Command::CleanM2(args) => commands::clean_m2::run(args, &cfg.clean_m2, cli.dry_run)
+            .await
+            .map(drop),
         Command::CleanGradle(args) => {
-            commands::clean_gradle::run(args, &cfg.clean_gradle, cli.dry_run).await
+            commands::clean_gradle::run(args, &cfg.clean_gradle, cli.dry_run)
+                .await
+                .map(drop)
         }
-        Command::CleanTmp(args) => {
-            commands::clean_tmp::run(args, &cfg.clean_tmp, cli.dry_run).await
-        }
+        Command::CleanTmp(args) => commands::clean_tmp::run(args, &cfg.clean_tmp, cli.dry_run)
+            .await
+            .map(drop),
         Command::CleanXcode(args) => {
-            commands::clean_xcode::run(args, &cfg.clean_xcode, cli.dry_run).await
+            commands::clean_xcode::run(args, &cfg.clean_xcode, cli.dry_run)
+                .await
+                .map(drop)
         }
         Command::CleanDocker(args) => {
-            commands::clean_docker::run(args, &cfg.clean_docker, cli.dry_run).await
+            commands::clean_docker::run(args, &cfg.clean_docker, cli.dry_run)
+                .await
+                .map(drop)
         }
-        Command::CleanBrew(args) => {
-            commands::clean_brew::run(args, &cfg.clean_brew, cli.dry_run).await
-        }
-        Command::CleanNpm(args) => {
-            commands::clean_npm::run(args, &cfg.clean_npm, cli.dry_run).await
-        }
+        Command::CleanBrew(args) => commands::clean_brew::run(args, &cfg.clean_brew, cli.dry_run)
+            .await
+            .map(drop),
+        Command::CleanNpm(args) => commands::clean_npm::run(args, &cfg.clean_npm, cli.dry_run)
+            .await
+            .map(drop),
         Command::CleanTrash(args) => {
-            commands::clean_trash::run(args, &cfg.clean_trash, cli.dry_run).await
+            commands::clean_trash::run(args, &cfg.clean_trash, cli.dry_run)
+                .await
+                .map(drop)
         }
-        Command::CleanYarn(args) => {
-            commands::clean_yarn::run(args, &cfg.clean_yarn, cli.dry_run).await
-        }
-        Command::CleanPnpm(args) => {
-            commands::clean_pnpm::run(args, &cfg.clean_pnpm, cli.dry_run).await
-        }
-        Command::CleanPip(args) => {
-            commands::clean_pip::run(args, &cfg.clean_pip, cli.dry_run).await
-        }
+        Command::CleanYarn(args) => commands::clean_yarn::run(args, &cfg.clean_yarn, cli.dry_run)
+            .await
+            .map(drop),
+        Command::CleanPnpm(args) => commands::clean_pnpm::run(args, &cfg.clean_pnpm, cli.dry_run)
+            .await
+            .map(drop),
+        Command::CleanPip(args) => commands::clean_pip::run(args, &cfg.clean_pip, cli.dry_run)
+            .await
+            .map(drop),
         Command::CleanCocoapods(args) => {
-            commands::clean_cocoapods::run(args, &cfg.clean_cocoapods, cli.dry_run).await
+            commands::clean_cocoapods::run(args, &cfg.clean_cocoapods, cli.dry_run)
+                .await
+                .map(drop)
         }
         Command::CleanGoBuild(args) => {
-            commands::clean_go_build::run(args, &cfg.clean_go_build, cli.dry_run).await
+            commands::clean_go_build::run(args, &cfg.clean_go_build, cli.dry_run)
+                .await
+                .map(drop)
         }
         Command::CleanJetbrains(args) => {
-            commands::clean_jetbrains::run(args, &cfg.clean_jetbrains, cli.dry_run).await
+            commands::clean_jetbrains::run(args, &cfg.clean_jetbrains, cli.dry_run)
+                .await
+                .map(drop)
+        }
+        Command::CleanLibraryCaches(args) => {
+            commands::clean_library_caches::run(args, &cfg.clean_library_caches, cli.dry_run)
+                .await
+                .map(drop)
         }
         Command::CleanPlaywright(args) => {
-            commands::clean_playwright::run(args, &cfg.clean_playwright, cli.dry_run).await
+            commands::clean_playwright::run(args, &cfg.clean_playwright, cli.dry_run)
+                .await
+                .map(drop)
         }
         Command::CleanCypress(args) => {
-            commands::clean_cypress::run(args, &cfg.clean_cypress, cli.dry_run).await
+            commands::clean_cypress::run(args, &cfg.clean_cypress, cli.dry_run)
+                .await
+                .map(drop)
         }
         Command::CleanNodeGyp(args) => {
-            commands::clean_node_gyp::run(args, &cfg.clean_node_gyp, cli.dry_run).await
+            commands::clean_node_gyp::run(args, &cfg.clean_node_gyp, cli.dry_run)
+                .await
+                .map(drop)
         }
     }
 }
