@@ -9,12 +9,13 @@
 //! line through `MultiProgress::println` so the live bar area is repainted cleanly.
 
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
-use std::io;
+use std::io::{self, IsTerminal};
 use std::sync::OnceLock;
 use std::time::Duration;
 use tracing_subscriber::fmt::MakeWriter;
 
 static MP: OnceLock<MultiProgress> = OnceLock::new();
+static INTERACTIVE: OnceLock<bool> = OnceLock::new();
 
 pub fn init() {
     let mp = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(8));
@@ -23,6 +24,24 @@ pub fn init() {
 
 pub fn mp() -> &'static MultiProgress {
     MP.get_or_init(|| MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(8)))
+}
+
+/// Whether stderr is a terminal. When it isn't (cron, pipes, log files),
+/// indicatif draws to a hidden target and `MultiProgress::println` silently
+/// drops every line — so callers must fall back to plain stderr instead.
+pub fn interactive() -> bool {
+    *INTERACTIVE.get_or_init(|| io::stderr().is_terminal())
+}
+
+/// Emit one scrollback line. In a terminal it goes through `MultiProgress` so the
+/// live progress bars repaint cleanly; otherwise it goes straight to stderr so
+/// non-interactive runs aren't silent.
+pub fn emit_line(line: &str) {
+    if interactive() {
+        let _ = mp().println(line);
+    } else {
+        eprintln!("{line}");
+    }
 }
 
 /// Parent progress bar for a command. Holds total + current freed bytes etc.
@@ -80,8 +99,8 @@ fn done_err_style() -> ProgressStyle {
 /// Print a tree-shaped summary of `items` under `header`. Labels are padded so the
 /// detail column lines up vertically.
 pub fn print_tree(header: &str, items: &[TreeItem]) {
-    let _ = mp().println("");
-    let _ = mp().println(header);
+    emit_line("");
+    emit_line(header);
     let max_label = items
         .iter()
         .map(|i| i.label.chars().count())
@@ -96,7 +115,7 @@ pub fn print_tree(header: &str, items: &[TreeItem]) {
         let icon = if item.ok { "✓" } else { "✗" };
         let label = pad_right(&item.label, max_label);
         let detail = format_detail(&item.detail);
-        let _ = mp().println(format!("  {branch} {icon} {label}  {detail}"));
+        emit_line(&format!("  {branch} {icon} {label}  {detail}"));
     }
 }
 
@@ -233,7 +252,7 @@ impl io::Write for MpHandle {
         let s = std::str::from_utf8(buf).unwrap_or("");
         for line in s.split('\n') {
             if !line.is_empty() {
-                let _ = mp().println(line);
+                emit_line(line);
             }
         }
         Ok(buf.len())
