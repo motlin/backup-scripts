@@ -27,6 +27,7 @@ pub struct AppConfig {
     pub clean_go_build: CleanGoBuildConfig,
     pub clean_jetbrains: CleanJetBrainsConfig,
     pub clean_library_caches: CleanLibraryCachesConfig,
+    pub clean_chrome: CleanChromeConfig,
     pub clean_playwright: CleanPlaywrightConfig,
     pub clean_cypress: CleanCypressConfig,
     pub clean_node_gyp: CleanNodeGypConfig,
@@ -189,6 +190,17 @@ pub struct CleanLibraryCachesConfig {
     pub paths: Option<Vec<PathBuf>>,
     pub days: Option<u32>,
     pub concurrency: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanChromeConfig {
+    pub chrome_dir: Option<PathBuf>,
+    pub model_dirs: Option<Vec<String>>,
+    pub profile_subdirs: Option<Vec<String>>,
+    pub days: Option<u32>,
+    pub concurrency: Option<usize>,
+    pub skip_running_check: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize)]

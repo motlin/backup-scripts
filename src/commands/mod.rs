@@ -55,6 +55,7 @@ pub mod all;
 pub mod bz_cleanup;
 pub mod clean_brew;
 pub mod clean_cargo;
+pub mod clean_chrome;
 pub mod clean_cocoapods;
 pub mod clean_cypress;
 pub mod clean_docker;

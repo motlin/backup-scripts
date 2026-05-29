@@ -9,10 +9,10 @@ use crate::config::AppConfig;
 use crate::ui::format_duration;
 
 use super::{
-    CommandSummary, bz_cleanup, clean_brew, clean_cargo, clean_cocoapods, clean_cypress,
-    clean_docker, clean_go_build, clean_gradle, clean_jetbrains, clean_library_caches, clean_m2,
-    clean_maven, clean_node, clean_node_gyp, clean_npm, clean_pip, clean_playwright, clean_pnpm,
-    clean_tmp, clean_trash, clean_xcode, clean_yarn, git_maintenance,
+    CommandSummary, bz_cleanup, clean_brew, clean_cargo, clean_chrome, clean_cocoapods,
+    clean_cypress, clean_docker, clean_go_build, clean_gradle, clean_jetbrains,
+    clean_library_caches, clean_m2, clean_maven, clean_node, clean_node_gyp, clean_npm, clean_pip,
+    clean_playwright, clean_pnpm, clean_tmp, clean_trash, clean_xcode, clean_yarn, git_maintenance,
 };
 
 pub const DEFAULT_STEPS: &[&str] = &[
@@ -34,6 +34,7 @@ pub const DEFAULT_STEPS: &[&str] = &[
     "clean-go-build",
     "clean-jetbrains",
     "clean-library-caches",
+    "clean-chrome",
     "clean-playwright",
     "clean-cypress",
     "clean-node-gyp",
@@ -185,6 +186,10 @@ pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
                         dry_run,
                     )
                     .await?
+                }
+                "clean-chrome" => {
+                    clean_chrome::run(clean_chrome::Args::default(), &config.clean_chrome, dry_run)
+                        .await?
                 }
                 "clean-playwright" => {
                     clean_playwright::run(

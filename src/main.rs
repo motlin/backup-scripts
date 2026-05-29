@@ -90,6 +90,13 @@ enum Command {
     /// each path's contents but keeps the parent dir intact.
     CleanLibraryCaches(commands::clean_library_caches::Args),
 
+    /// Reclaim space under `~/Library/Application Support/Google/Chrome` by
+    /// scrubbing on-device model bundles (OptGuide*, SODA*, WasmTtsEngine, …)
+    /// and per-profile `Service Worker` caches. Refuses to run while Chrome
+    /// is open. Chrome re-downloads models on demand; sites re-register
+    /// service workers on next visit.
+    CleanChrome(commands::clean_chrome::Args),
+
     /// Delete stale Playwright browser-version dirs (~/Library/Caches/ms-playwright/*).
     CleanPlaywright(commands::clean_playwright::Args),
 
@@ -200,6 +207,11 @@ async fn main() -> Result<()> {
         }
         Command::CleanLibraryCaches(args) => {
             commands::clean_library_caches::run(args, &cfg.clean_library_caches, cli.dry_run)
+                .await
+                .map(drop)
+        }
+        Command::CleanChrome(args) => {
+            commands::clean_chrome::run(args, &cfg.clean_chrome, cli.dry_run)
                 .await
                 .map(drop)
         }
