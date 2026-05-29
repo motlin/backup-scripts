@@ -144,6 +144,7 @@ pub async fn run(args: Args, cfg: &CleanNpmConfig, dry_run: bool) -> Result<Comm
             bytes_freed: bytes,
             items_ok,
             items_failed,
+            items_skipped: 0,
         })
     } else {
         Ok(CommandSummary::default())

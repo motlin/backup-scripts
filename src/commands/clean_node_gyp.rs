@@ -134,6 +134,7 @@ pub async fn run(args: Args, cfg: &CleanNodeGypConfig, dry_run: bool) -> Result<
             bytes_freed: bytes,
             items_ok,
             items_failed,
+            items_skipped: 0,
         })
     } else {
         Ok(CommandSummary::default())

@@ -33,8 +33,8 @@ pub async fn run(args: Args, cfg: &CleanDockerConfig, dry_run: bool) -> Result<C
     let span = info_span!("clean-docker", hours, scope = %scope);
     async move {
         if !docker_available().await {
-            info!("docker CLI not installed or daemon not running — skipping");
-            return Ok(CommandSummary::default());
+            warn!("docker CLI not installed or daemon not running — skipping");
+            return Ok(CommandSummary::skipped_one());
         }
 
         if scope != "system" {

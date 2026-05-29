@@ -14,8 +14,8 @@ pub struct Args {}
 pub async fn run(_args: Args, _cfg: &CleanYarnConfig, dry_run: bool) -> Result<CommandSummary> {
     async move {
         if !tool_available().await {
-            info!("yarn not on PATH — skipping");
-            return Ok(CommandSummary::default());
+            warn!("yarn not on PATH — skipping");
+            return Ok(CommandSummary::skipped_one());
         }
         if dry_run {
             info!("dry run: would run `yarn cache clean`");

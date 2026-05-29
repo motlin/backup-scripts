@@ -242,18 +242,65 @@ pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
     .await
 }
 
-fn print_aggregate_summary(results: &[StepResult], elapsed: std::time::Duration) {
-    let mut total = CommandSummary::default();
-    let mut passed = 0u64;
-    let mut failed = 0u64;
+/// Status tag for a single step: `FAIL` if anything failed, `skip` if the step
+/// did no work and only recorded skips (tool absent), otherwise `ok `.
+fn step_status(summary: &CommandSummary) -> &'static str {
+    if !summary.passed() {
+        "FAIL"
+    } else if summary.skipped() {
+        "skip"
+    } else {
+        "ok "
+    }
+}
+
+/// Per-step item counts, appending `, N skipped` only when there were skips so
+/// the common case stays uncluttered.
+fn step_counts(summary: &CommandSummary) -> String {
+    if summary.items_skipped > 0 {
+        format!(
+            "({} ok, {} failed, {} skipped)",
+            summary.items_ok, summary.items_failed, summary.items_skipped
+        )
+    } else {
+        format!("({} ok, {} failed)", summary.items_ok, summary.items_failed)
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Tally {
+    passed: u64,
+    failed: u64,
+    skipped: u64,
+}
+
+/// Classify each step as passed / failed / skipped. A step that only recorded
+/// skips counts as `skipped`, not `passed`, so an absent tool can't hide inside
+/// the passed count.
+fn tally(results: &[StepResult]) -> Tally {
+    let mut t = Tally::default();
     for r in results {
-        total.merge(r.summary);
-        if r.summary.passed() {
-            passed += 1;
+        if !r.summary.passed() {
+            t.failed += 1;
+        } else if r.summary.skipped() {
+            t.skipped += 1;
         } else {
-            failed += 1;
+            t.passed += 1;
         }
     }
+    t
+}
+
+fn print_aggregate_summary(results: &[StepResult], elapsed: std::time::Duration) {
+    let mut total = CommandSummary::default();
+    for r in results {
+        total.merge(r.summary);
+    }
+    let Tally {
+        passed,
+        failed,
+        skipped,
+    } = tally(results);
 
     info!("all: per-command results:");
     let max_name = results
@@ -262,19 +309,71 @@ fn print_aggregate_summary(results: &[StepResult], elapsed: std::time::Duration)
         .max()
         .unwrap_or(0);
     for r in results {
-        let status = if r.summary.passed() { "ok " } else { "FAIL" };
+        let status = step_status(&r.summary);
         let padded = format!("{:<width$}", r.name, width = max_name);
         info!(
-            "  [{status}] {padded}  {:>10}  ({} ok, {} failed)",
+            "  [{status}] {padded}  {:>10}  {}",
             format_size(r.summary.bytes_freed, BINARY),
-            r.summary.items_ok,
-            r.summary.items_failed,
+            step_counts(&r.summary),
         );
     }
     info!(
-        "all: {passed} passed, {failed} failed, {} freed across {} items in {}",
+        "all: {passed} passed, {failed} failed, {skipped} skipped, {} freed across {} items in {}",
         format_size(total.bytes_freed, BINARY),
         total.items_total(),
         format_duration(elapsed.as_millis() as u64),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn step(name: &str, summary: CommandSummary) -> StepResult {
+        StepResult {
+            name: name.to_string(),
+            summary,
+        }
+    }
+
+    #[test]
+    fn step_status_distinguishes_skip_from_ok() {
+        assert_eq!(step_status(&CommandSummary::ok_one()), "ok ");
+        assert_eq!(step_status(&CommandSummary::skipped_one()), "skip");
+        assert_eq!(step_status(&CommandSummary::failed_one()), "FAIL");
+    }
+
+    #[test]
+    fn step_status_failure_wins_over_skip() {
+        let mut s = CommandSummary::skipped_one();
+        s.merge(CommandSummary::failed_one());
+        assert_eq!(step_status(&s), "FAIL");
+    }
+
+    #[test]
+    fn step_counts_hides_skipped_when_zero() {
+        assert_eq!(step_counts(&CommandSummary::ok_one()), "(1 ok, 0 failed)");
+        assert_eq!(
+            step_counts(&CommandSummary::skipped_one()),
+            "(0 ok, 0 failed, 1 skipped)"
+        );
+    }
+
+    #[test]
+    fn tally_counts_skip_separately_from_passed() {
+        let results = vec![
+            step("a", CommandSummary::ok_one()),
+            step("b", CommandSummary::skipped_one()),
+            step("c", CommandSummary::failed_one()),
+            step("d", CommandSummary::ok_one()),
+        ];
+        assert_eq!(
+            tally(&results),
+            Tally {
+                passed: 2,
+                failed: 1,
+                skipped: 1,
+            }
+        );
+    }
 }

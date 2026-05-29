@@ -147,6 +147,7 @@ pub async fn run(
             bytes_freed: bytes,
             items_ok,
             items_failed,
+            items_skipped: 0,
         })
     } else {
         Ok(CommandSummary::default())

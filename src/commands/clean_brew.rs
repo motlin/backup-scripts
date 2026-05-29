@@ -27,8 +27,8 @@ pub async fn run(args: Args, cfg: &CleanBrewConfig, dry_run: bool) -> Result<Com
     let span = info_span!("clean-brew", prune = %prune);
     async move {
         if !brew_available().await {
-            info!("brew not on PATH — skipping");
-            return Ok(CommandSummary::default());
+            warn!("brew not on PATH — skipping");
+            return Ok(CommandSummary::skipped_one());
         }
 
         run_brew_cleanup(&prune, dry_run).await

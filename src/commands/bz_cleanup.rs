@@ -85,6 +85,7 @@ pub async fn run(args: Args, cfg: &BzCleanupConfig, dry_run: bool) -> Result<Com
                 bytes_freed: scan.bytes,
                 items_ok: scan.count,
                 items_failed: 0,
+                items_skipped: 0,
             });
         }
 
@@ -93,6 +94,7 @@ pub async fn run(args: Args, cfg: &BzCleanupConfig, dry_run: bool) -> Result<Com
             bytes_freed: scan.bytes,
             items_ok: scan.count,
             items_failed: 0,
+            items_skipped: 0,
         })
     }
     .instrument(info_span!("bz-cleanup", days))

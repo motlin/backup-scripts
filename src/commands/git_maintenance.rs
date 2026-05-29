@@ -203,6 +203,7 @@ pub async fn run(
             bytes_freed: freed,
             items_ok: ok_count as u64,
             items_failed: fail_count as u64,
+            items_skipped: 0,
         })
     }
     .instrument(info_span!("git-maintenance"))

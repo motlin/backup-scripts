@@ -110,6 +110,7 @@ pub async fn clean(
         bytes_freed: bytes,
         items_ok,
         items_failed,
+        items_skipped: 0,
     })
 }
 

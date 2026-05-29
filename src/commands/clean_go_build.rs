@@ -14,8 +14,8 @@ pub struct Args {}
 pub async fn run(_args: Args, _cfg: &CleanGoBuildConfig, dry_run: bool) -> Result<CommandSummary> {
     async move {
         if !tool_available().await {
-            info!("go not on PATH — skipping");
-            return Ok(CommandSummary::default());
+            warn!("go not on PATH — skipping");
+            return Ok(CommandSummary::skipped_one());
         }
         let started = Instant::now();
         let mut cmd = Command::new("go");

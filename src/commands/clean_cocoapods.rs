@@ -18,8 +18,8 @@ pub async fn run(
 ) -> Result<CommandSummary> {
     async move {
         if !tool_available().await {
-            info!("pod not on PATH — skipping");
-            return Ok(CommandSummary::default());
+            warn!("pod not on PATH — skipping");
+            return Ok(CommandSummary::skipped_one());
         }
         if dry_run {
             info!("dry run: would run `pod cache clean --all`");

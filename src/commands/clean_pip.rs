@@ -16,8 +16,8 @@ pub async fn run(_args: Args, _cfg: &CleanPipConfig, dry_run: bool) -> Result<Co
         let invocation = match detect_pip().await {
             Some(inv) => inv,
             None => {
-                info!("pip not on PATH (tried `pip`, `python3 -m pip`) — skipping");
-                return Ok(CommandSummary::default());
+                warn!("pip not on PATH (tried `pip`, `python3 -m pip`) — skipping");
+                return Ok(CommandSummary::skipped_one());
             }
         };
         if dry_run {

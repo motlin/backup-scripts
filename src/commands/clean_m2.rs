@@ -140,6 +140,7 @@ pub async fn run(args: Args, cfg: &CleanM2Config, dry_run: bool) -> Result<Comma
             bytes_freed: bytes,
             items_ok,
             items_failed,
+            items_skipped: 0,
         })
     }
     .instrument(info_span!("clean-m2", snapshots_only, days,))
