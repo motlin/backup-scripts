@@ -1,6 +1,7 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Args as ClapArgs;
-use std::path::PathBuf;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::process::Command;
@@ -9,7 +10,7 @@ use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
 
 use super::CommandSummary;
-use crate::config::{GitMaintenanceConfig, resolve_roots};
+use crate::config::{GitMaintenanceConfig, GitMaintenanceOverride, resolve_roots};
 use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
 use crate::walk::{dir_size, find_dirs_with_marker};
 use humansize::{BINARY, format_size};
@@ -53,6 +54,60 @@ const MAINTENANCE_STEPS: &[(&str, &[&str])] = &[
         &["commit-graph", "write", "--reachable", "--changed-paths"],
     ),
 ];
+
+/// Reject overrides that name a step which doesn't exist, so a typo (e.g.
+/// `gc` instead of `repack`) fails loudly instead of silently doing nothing.
+fn validate_overrides(overrides: &[GitMaintenanceOverride]) -> Result<()> {
+    let known: HashSet<&str> = MAINTENANCE_STEPS.iter().map(|(name, _)| *name).collect();
+    for over in overrides {
+        for step in &over.skip_steps {
+            if !known.contains(step.as_str()) {
+                bail!(
+                    "unknown step in git_maintenance.overrides for `{}`: {step} (valid: {})",
+                    over.repo,
+                    MAINTENANCE_STEPS
+                        .iter()
+                        .map(|(name, _)| *name)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// True when `repo`'s trailing path components equal those of `suffix`. Compared
+/// component-wise so `monorepo` does not match a repo named `huge-monorepo`.
+fn matches_suffix(repo: &Path, suffix: &str) -> bool {
+    let suffix_comps: Vec<_> = Path::new(suffix).components().collect();
+    if suffix_comps.is_empty() {
+        return false;
+    }
+    let repo_comps: Vec<_> = repo.components().collect();
+    if suffix_comps.len() > repo_comps.len() {
+        return false;
+    }
+    repo_comps[repo_comps.len() - suffix_comps.len()..] == suffix_comps[..]
+}
+
+/// Union of all `skip_steps` from overrides whose `repo` suffix matches `repo`.
+fn skip_steps_for(repo: &Path, overrides: &[GitMaintenanceOverride]) -> HashSet<String> {
+    overrides
+        .iter()
+        .filter(|over| matches_suffix(repo, &over.repo))
+        .flat_map(|over| over.skip_steps.iter().cloned())
+        .collect()
+}
+
+/// Skipped step names in canonical maintenance order, for stable reporting.
+fn ordered_skipped(skip: &HashSet<String>) -> Vec<&'static str> {
+    MAINTENANCE_STEPS
+        .iter()
+        .map(|(name, _)| *name)
+        .filter(|name| skip.contains(*name))
+        .collect()
+}
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
@@ -98,6 +153,8 @@ pub async fn run(
     let fsck = args.fsck;
 
     let roots = resolve_roots(args.roots, &cfg.roots, global_roots, "git_maintenance")?;
+    let overrides = cfg.overrides.clone().unwrap_or_default();
+    validate_overrides(&overrides)?;
 
     async move {
         let mut repos: Vec<PathBuf> = Vec::new();
@@ -140,7 +197,16 @@ pub async fn run(
 
         if dry_run {
             for repo in &repos {
-                info!("would maintain {}", repo.display());
+                let skip = skip_steps_for(repo, &overrides);
+                if skip.is_empty() {
+                    info!("would maintain {}", repo.display());
+                } else {
+                    info!(
+                        "would maintain {} (skip: {})",
+                        repo.display(),
+                        ordered_skipped(&skip).join(", ")
+                    );
+                }
             }
             return Ok(CommandSummary {
                 items_ok: repos.len() as u64,
@@ -165,6 +231,7 @@ pub async fn run(
         let sem = Arc::new(Semaphore::new(concurrency.max(1)));
         let mut set: JoinSet<()> = JoinSet::new();
         for repo in repos {
+            let skip = skip_steps_for(&repo, &overrides);
             let sem = Arc::clone(&sem);
             let bar = Arc::clone(&bar);
             let items = Arc::clone(&items);
@@ -172,7 +239,7 @@ pub async fn run(
             set.spawn(
                 async move {
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                    maintain_one(repo, max_label, &bar, &items, &total_freed, fsck).await;
+                    maintain_one(repo, max_label, &bar, &items, &total_freed, fsck, &skip).await;
                 }
                 .in_current_span(),
             );
@@ -223,6 +290,7 @@ async fn maintain_one(
     items: &Mutex<Vec<TreeItem>>,
     total_freed: &std::sync::atomic::AtomicU64,
     fsck: bool,
+    skip: &HashSet<String>,
 ) {
     let label = repo_label(&repo);
     let padded = pad_right(&label, max_label);
@@ -233,6 +301,9 @@ async fn maintain_one(
 
     let mut failure: Option<(&str, String)> = None;
     for (step_name, step_args) in MAINTENANCE_STEPS {
+        if skip.contains(*step_name) {
+            continue;
+        }
         let mut cmd = Command::new("git");
         cmd.arg("-C").arg(&repo);
         cmd.args(*step_args);
@@ -281,13 +352,19 @@ async fn maintain_one(
         let (verb, size_str) = delta_components(size_before, size_after);
         let bar_freed = total_freed.load(std::sync::atomic::Ordering::Relaxed);
         bar.set_message(format!("{} freed", format_size(bar_freed, BINARY)));
-        let fsck_suffix = match &fsck_summary {
-            Some(s) if !s.is_empty() => format!("; fsck: {s}"),
-            _ => String::new(),
-        };
+        let mut notes = String::new();
+        let skipped = ordered_skipped(skip);
+        if !skipped.is_empty() {
+            notes.push_str(&format!("; skipped: {}", skipped.join(", ")));
+        }
+        if let Some(s) = &fsck_summary
+            && !s.is_empty()
+        {
+            notes.push_str(&format!("; fsck: {s}"));
+        }
         let mut detail = ItemDetail::success(verb, size_str, &elapsed);
-        if !fsck_suffix.is_empty() {
-            detail = detail.with_suffix(fsck_suffix);
+        if !notes.is_empty() {
+            detail = detail.with_suffix(notes);
         }
         info!("✓ {padded}  {}", ui::format_detail(&detail));
         (true, detail)
@@ -379,4 +456,72 @@ fn resolve_gitdir(repo: &std::path::Path) -> PathBuf {
         };
     }
     dotgit
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn over(repo: &str, skip: &[&str]) -> GitMaintenanceOverride {
+        GitMaintenanceOverride {
+            repo: repo.to_string(),
+            skip_steps: skip.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn matches_suffix_full_and_partial_components() {
+        let repo = Path::new("/Users/me/projects/huge-monorepo");
+        assert!(matches_suffix(repo, "huge-monorepo"));
+        assert!(matches_suffix(repo, "projects/huge-monorepo"));
+        assert!(matches_suffix(repo, "/Users/me/projects/huge-monorepo"));
+    }
+
+    #[test]
+    fn matches_suffix_rejects_non_component_substring() {
+        let repo = Path::new("/Users/me/projects/huge-monorepo");
+        assert!(!matches_suffix(repo, "monorepo"));
+        assert!(!matches_suffix(repo, "other-repo"));
+        assert!(!matches_suffix(repo, ""));
+    }
+
+    #[test]
+    fn matches_suffix_rejects_suffix_longer_than_repo() {
+        assert!(!matches_suffix(Path::new("/a/b"), "x/a/b"));
+    }
+
+    #[test]
+    fn skip_steps_for_unions_matching_overrides() {
+        let repo = Path::new("/Users/me/projects/huge-monorepo");
+        let overrides = vec![
+            over("projects/huge-monorepo", &["repack"]),
+            over("huge-monorepo", &["prune"]),
+            over("other", &["commit-graph"]),
+        ];
+        let skip = skip_steps_for(repo, &overrides);
+        assert_eq!(
+            skip,
+            HashSet::from(["repack".to_string(), "prune".to_string()])
+        );
+    }
+
+    #[test]
+    fn skip_steps_for_no_match_is_empty() {
+        let repo = Path::new("/Users/me/projects/small");
+        let overrides = vec![over("huge-monorepo", &["repack"])];
+        assert!(skip_steps_for(repo, &overrides).is_empty());
+    }
+
+    #[test]
+    fn validate_overrides_accepts_known_steps() {
+        let overrides = vec![over("a", &["repack", "prune", "commit-graph"])];
+        assert!(validate_overrides(&overrides).is_ok());
+    }
+
+    #[test]
+    fn validate_overrides_rejects_unknown_step() {
+        let overrides = vec![over("a", &["gc"])];
+        let err = validate_overrides(&overrides).unwrap_err().to_string();
+        assert!(err.contains("gc"), "error should name the bad step: {err}");
+    }
 }

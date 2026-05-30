@@ -63,6 +63,21 @@ pub struct GitMaintenanceConfig {
     pub concurrency: Option<usize>,
     /// Run maintenance on submodules too. Default true.
     pub submodules: Option<bool>,
+    /// Per-repo overrides that skip specific maintenance steps (e.g. the
+    /// expensive `repack`) for repos matched by path suffix.
+    pub overrides: Option<Vec<GitMaintenanceOverride>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GitMaintenanceOverride {
+    /// Match any repo whose path ends with this value, compared component-wise
+    /// (e.g. `projects/huge-monorepo` matches `/Users/me/projects/huge-monorepo`).
+    pub repo: String,
+    /// Maintenance step names to skip for matched repos. Valid names:
+    /// `pack-refs`, `reflog-expire`, `rerere-gc`, `worktree-prune`, `repack`,
+    /// `prune`, `commit-graph`.
+    pub skip_steps: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
