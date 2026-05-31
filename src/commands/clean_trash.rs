@@ -17,53 +17,61 @@ use crate::walk::dir_size;
 pub struct Args {}
 
 pub async fn run(_args: Args, _cfg: &CleanTrashConfig, dry_run: bool) -> Result<CommandSummary> {
-    let trash = default_trash_dir();
+    let locations = trash_locations();
 
     let result = async move {
-        if !trash.exists() {
-            info!(path = %trash.display(), "Trash directory does not exist; skipping");
+        if locations.is_empty() {
+            info!("no trash directories found; skipping");
             return Ok::<_, anyhow::Error>(None);
         }
 
-        let entries = match read_trash_entries(&trash) {
-            Ok(e) => e,
-            Err(e) => {
-                warn!("cannot read {}: {e}", trash.display());
-                return Ok::<_, anyhow::Error>(None);
+        // Flatten every location's entries into one work list of (path, label).
+        // Each location keeps skipping `.DS_Store` and never yields the trash
+        // directory itself — only its contents.
+        let mut work: Vec<(PathBuf, String)> = Vec::new();
+        for loc in &locations {
+            match read_trash_entries(&loc.dir) {
+                Ok(entries) => {
+                    for path in entries {
+                        let label = entry_label(&path, &loc.dir, &loc.prefix);
+                        work.push((path, label));
+                    }
+                }
+                Err(e) => warn!("cannot read {}: {e}", loc.dir.display()),
             }
-        };
-        info!(found = entries.len(), "Trash entries");
+        }
+        info!(found = work.len(), "Trash entries");
 
-        if entries.is_empty() {
+        if work.is_empty() {
             return Ok::<_, anyhow::Error>(None);
         }
 
-        let size_before = dir_size(&trash).await.unwrap_or(0);
+        let size_before = total_dir_size(&locations).await;
         let started = Instant::now();
 
-        let bar = CommandBar::new("clean-trash", entries.len() as u64);
+        let bar = CommandBar::new("clean-trash", work.len() as u64);
         let total_bytes = AtomicU64::new(0);
         let total_count = AtomicU64::new(0);
         let items: Mutex<Vec<TreeItem>> = Mutex::new(Vec::new());
 
-        let max_label = entries
+        let max_label = work
             .iter()
-            .map(|p| entry_label(p, &trash).chars().count())
+            .map(|(_, label)| label.chars().count())
             .max()
             .unwrap_or(0);
 
         // Process serially. Concurrent rm operations on the same parent directory
         // do not parallelize well, and the per-entry filesystem operations are quick.
-        for entry in entries {
+        for (path, label) in work {
             clean_one(
-                entry,
+                path,
+                label,
                 max_label,
                 dry_run,
                 &total_bytes,
                 &total_count,
                 &bar,
                 &items,
-                &trash,
             )
             .await;
         }
@@ -71,7 +79,7 @@ pub async fn run(_args: Args, _cfg: &CleanTrashConfig, dry_run: bool) -> Result<
         let size_after = if dry_run {
             size_before
         } else {
-            dir_size(&trash).await.unwrap_or(0)
+            total_dir_size(&locations).await
         };
         let freed = size_before.saturating_sub(size_after);
 
@@ -126,25 +134,34 @@ fn read_trash_entries(trash: &Path) -> std::io::Result<Vec<PathBuf>> {
     Ok(out)
 }
 
-fn entry_label(path: &Path, trash: &Path) -> String {
-    path.strip_prefix(trash)
+/// Label for an entry: its path relative to the trash dir, prefixed with the
+/// location's volume name when non-empty (e.g. `USB Drive/old-file.txt`) so
+/// entries from different volumes are unambiguous. Home trash uses an empty
+/// prefix, keeping labels identical to before.
+fn entry_label(path: &Path, trash: &Path, prefix: &str) -> String {
+    let rel = path
+        .strip_prefix(trash)
         .unwrap_or(path)
         .display()
-        .to_string()
+        .to_string();
+    if prefix.is_empty() {
+        rel
+    } else {
+        format!("{prefix}/{rel}")
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn clean_one(
     path: PathBuf,
+    label: String,
     max_label: usize,
     dry_run: bool,
     total_bytes: &AtomicU64,
     total_count: &AtomicU64,
     bar: &CommandBar,
     items: &Mutex<Vec<TreeItem>>,
-    trash: &Path,
 ) {
-    let label = entry_label(&path, trash);
     let padded = pad_right(&label, max_label);
 
     let started = Instant::now();
@@ -203,14 +220,42 @@ fn default_trash_dir() -> PathBuf {
     PathBuf::from(home).join(".Trash")
 }
 
+/// Default directory under which macOS mounts volumes.
+fn default_volumes_dir() -> PathBuf {
+    PathBuf::from("/Volumes")
+}
+
+/// Build the ordered list of trash directories to sweep: the home trash first
+/// (when it exists), followed by each discovered per-volume trash. Locations
+/// that don't exist are omitted.
+fn trash_locations() -> Vec<TrashLocation> {
+    let mut locations = Vec::new();
+    let home = default_trash_dir();
+    if home.exists() {
+        locations.push(TrashLocation {
+            dir: home,
+            prefix: String::new(),
+        });
+    }
+    locations.extend(discover_volume_trashes(
+        &default_volumes_dir(),
+        &current_uid(),
+    ));
+    locations
+}
+
+/// Sum of `dir_size` across every location dir.
+async fn total_dir_size(locations: &[TrashLocation]) -> u64 {
+    let mut total = 0u64;
+    for loc in locations {
+        total += dir_size(&loc.dir).await.unwrap_or(0);
+    }
+    total
+}
+
 /// A single trash directory to empty, with a label prefix that disambiguates
 /// entries from different volumes in the output tree ("" for the home trash).
-///
-/// Built by the volume-discovery helpers below. `run` is wired to iterate these
-/// in a later step of the multi-volume work, so for now they are exercised only
-/// by tests.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)]
 struct TrashLocation {
     dir: PathBuf,
     prefix: String,
@@ -219,7 +264,6 @@ struct TrashLocation {
 /// The current user's numeric uid, obtained by shelling out to `id -u` (mirrors
 /// the `du` shell-out in `walk::dir_size`, avoiding a `libc`/`nix` dependency).
 /// Returns an empty string if the command fails.
-#[allow(dead_code)]
 fn current_uid() -> String {
     std::process::Command::new("id")
         .arg("-u")
@@ -232,7 +276,6 @@ fn current_uid() -> String {
 }
 
 /// The per-volume trash directory for `uid`: `<volume_root>/.Trashes/<uid>`.
-#[allow(dead_code)]
 fn volume_trash_path(volume_root: &Path, uid: &str) -> PathBuf {
     volume_root.join(".Trashes").join(uid)
 }
@@ -242,7 +285,6 @@ fn volume_trash_path(volume_root: &Path, uid: &str) -> PathBuf {
 /// For each subdirectory, include `<volume>/.Trashes/<uid>` only when it exists,
 /// labeled with the volume's directory name. A missing or unreadable
 /// `volumes_dir` yields an empty vec.
-#[allow(dead_code)]
 fn discover_volume_trashes(volumes_dir: &Path, uid: &str) -> Vec<TrashLocation> {
     let Ok(entries) = std::fs::read_dir(volumes_dir) else {
         return Vec::new();
@@ -311,5 +353,35 @@ mod tests {
             std::env::temp_dir().join(format!("backup-clean-trash-{}-absent", std::process::id()));
         let _ = std::fs::remove_dir_all(&missing);
         assert!(discover_volume_trashes(&missing, "501").is_empty());
+    }
+
+    #[test]
+    fn entry_label_empty_prefix_is_relative() {
+        let trash = Path::new("/Users/me/.Trash");
+        let entry = trash.join("old-file.txt");
+        assert_eq!(entry_label(&entry, trash, ""), "old-file.txt");
+    }
+
+    #[test]
+    fn entry_label_volume_prefix_is_prepended() {
+        let trash = Path::new("/Volumes/USB Drive/.Trashes/501");
+        let entry = trash.join("old-file.txt");
+        assert_eq!(
+            entry_label(&entry, trash, "USB Drive"),
+            "USB Drive/old-file.txt"
+        );
+    }
+
+    #[test]
+    fn read_trash_entries_skips_ds_store() {
+        let dir = fixture_root("read-entries");
+        std::fs::write(dir.join(".DS_Store"), b"x").unwrap();
+        std::fs::write(dir.join("keep.txt"), b"y").unwrap();
+
+        let entries = read_trash_entries(&dir).unwrap();
+
+        assert_eq!(entries, vec![dir.join("keep.txt")]);
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
