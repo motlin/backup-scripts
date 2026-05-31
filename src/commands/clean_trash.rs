@@ -202,3 +202,114 @@ fn default_trash_dir() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/".to_string());
     PathBuf::from(home).join(".Trash")
 }
+
+/// A single trash directory to empty, with a label prefix that disambiguates
+/// entries from different volumes in the output tree ("" for the home trash).
+///
+/// Built by the volume-discovery helpers below. `run` is wired to iterate these
+/// in a later step of the multi-volume work, so for now they are exercised only
+/// by tests.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(dead_code)]
+struct TrashLocation {
+    dir: PathBuf,
+    prefix: String,
+}
+
+/// The current user's numeric uid, obtained by shelling out to `id -u` (mirrors
+/// the `du` shell-out in `walk::dir_size`, avoiding a `libc`/`nix` dependency).
+/// Returns an empty string if the command fails.
+#[allow(dead_code)]
+fn current_uid() -> String {
+    std::process::Command::new("id")
+        .arg("-u")
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
+}
+
+/// The per-volume trash directory for `uid`: `<volume_root>/.Trashes/<uid>`.
+#[allow(dead_code)]
+fn volume_trash_path(volume_root: &Path, uid: &str) -> PathBuf {
+    volume_root.join(".Trashes").join(uid)
+}
+
+/// Discover per-volume user trashes under `volumes_dir` (e.g. `/Volumes`).
+///
+/// For each subdirectory, include `<volume>/.Trashes/<uid>` only when it exists,
+/// labeled with the volume's directory name. A missing or unreadable
+/// `volumes_dir` yields an empty vec.
+#[allow(dead_code)]
+fn discover_volume_trashes(volumes_dir: &Path, uid: &str) -> Vec<TrashLocation> {
+    let Ok(entries) = std::fs::read_dir(volumes_dir) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in entries.flatten() {
+        let volume_root = entry.path();
+        if !volume_root.is_dir() {
+            continue;
+        }
+        let trash = volume_trash_path(&volume_root, uid);
+        if trash.is_dir() {
+            let prefix = volume_root
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            out.push(TrashLocation { dir: trash, prefix });
+        }
+    }
+    out.sort_by(|a, b| a.dir.cmp(&b.dir));
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Deterministic, self-cleaning fixture root under the OS temp dir. Scoped by
+    /// pid + `tag` so concurrent tests don't collide; removed and recreated fresh.
+    fn fixture_root(tag: &str) -> PathBuf {
+        let base =
+            std::env::temp_dir().join(format!("backup-clean-trash-{}-{tag}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        base
+    }
+
+    #[test]
+    fn volume_trash_path_builds_trashes_uid() {
+        assert_eq!(
+            volume_trash_path(Path::new("/Volumes/USB Drive"), "501"),
+            PathBuf::from("/Volumes/USB Drive/.Trashes/501")
+        );
+    }
+
+    #[test]
+    fn discover_volume_trashes_keeps_only_volumes_with_trash() {
+        let uid = "501";
+        let vols = fixture_root("discover");
+        std::fs::create_dir_all(vols.join("DriveA").join(".Trashes").join(uid)).unwrap();
+        std::fs::create_dir_all(vols.join("DriveB")).unwrap(); // mounted, but no trash
+        std::fs::write(vols.join("not-a-volume"), b"x").unwrap(); // plain file, ignored
+
+        let found = discover_volume_trashes(&vols, uid);
+
+        assert_eq!(found.len(), 1, "only DriveA has a .Trashes/<uid>");
+        assert_eq!(found[0].prefix, "DriveA");
+        assert_eq!(found[0].dir, vols.join("DriveA").join(".Trashes").join(uid));
+
+        std::fs::remove_dir_all(&vols).unwrap();
+    }
+
+    #[test]
+    fn discover_volume_trashes_missing_dir_is_empty() {
+        let missing =
+            std::env::temp_dir().join(format!("backup-clean-trash-{}-absent", std::process::id()));
+        let _ = std::fs::remove_dir_all(&missing);
+        assert!(discover_volume_trashes(&missing, "501").is_empty());
+    }
+}
