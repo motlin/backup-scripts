@@ -169,7 +169,12 @@ pub struct CleanNpmConfig {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct CleanTrashConfig {}
+pub struct CleanTrashConfig {
+    /// Also empty per-volume trashes under the volumes dir. Default: true.
+    pub include_volumes: Option<bool>,
+    /// Directory holding mounted volumes. Default: /Volumes. (Override for tests.)
+    pub volumes_dir: Option<PathBuf>,
+}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
