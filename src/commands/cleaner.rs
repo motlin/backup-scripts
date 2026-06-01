@@ -1,6 +1,6 @@
 use anyhow::Result;
 use humansize::{BINARY, format_size};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -56,15 +56,22 @@ pub async fn clean(
     let items: Arc<Mutex<Vec<TreeItem>>> = Arc::new(Mutex::new(Vec::new()));
     let bar = Arc::new(CommandBar::new(bar_label, candidates.len() as u64));
 
-    let max_label = candidates
+    let labeled: Vec<(PathBuf, String)> = candidates
+        .into_iter()
+        .map(|p| {
+            let label = project_label(&p, &roots);
+            (p, label)
+        })
+        .collect();
+    let max_label = labeled
         .iter()
-        .map(|p| project_label(p).chars().count())
+        .map(|(_, l)| l.chars().count())
         .max()
         .unwrap_or(0);
 
     let sem = Arc::new(Semaphore::new(concurrency.max(1)));
     let mut set: JoinSet<()> = JoinSet::new();
-    for project in candidates {
+    for (project, label) in labeled {
         let sem = Arc::clone(&sem);
         let total_bytes = Arc::clone(&total_bytes);
         let total_count = Arc::clone(&total_count);
@@ -75,6 +82,7 @@ pub async fn clean(
                 let _permit = sem.acquire_owned().await.expect("semaphore closed");
                 clean_one(
                     project,
+                    label,
                     max_label,
                     junk,
                     dry_run,
@@ -114,16 +122,34 @@ pub async fn clean(
     })
 }
 
-fn project_label(project: &std::path::Path) -> String {
-    project
-        .file_name()
+fn basename(path: &Path) -> String {
+    path.file_name()
         .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| project.display().to_string())
+        .unwrap_or_else(|| path.display().to_string())
+}
+
+fn project_label(project: &Path, roots: &[PathBuf]) -> String {
+    // Longest matching root → shortest, most specific relative path.
+    let best = roots
+        .iter()
+        .filter(|r| project.starts_with(r))
+        .max_by_key(|r| r.components().count());
+    if let Some(root) = best
+        && let Ok(rel) = project.strip_prefix(root)
+    {
+        if !rel.as_os_str().is_empty() {
+            return rel.display().to_string();
+        }
+        // project IS the root (marker at root top): use root basename.
+        return basename(root);
+    }
+    basename(project) // defensive fallback
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn clean_one(
     project: PathBuf,
+    label: String,
     max_label: usize,
     junk: &str,
     dry_run: bool,
@@ -133,7 +159,6 @@ async fn clean_one(
     items: &Mutex<Vec<TreeItem>>,
 ) {
     let junk_path = project.join(junk);
-    let label = project_label(&project);
     let padded = pad_right(&label, max_label);
 
     let started = Instant::now();
@@ -172,4 +197,48 @@ async fn clean_one(
     bar.set_message(format!("{verb} {}", format_size(running_bytes, BINARY)));
 
     items.lock().unwrap().push(TreeItem { label, detail, ok });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::project_label;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn nested_project_under_root_yields_relative_path() {
+        let roots = vec![PathBuf::from("/home/user/projects")];
+        let project = Path::new("/home/user/projects/motlin.com/cli");
+        assert_eq!(project_label(project, &roots), "motlin.com/cli");
+    }
+
+    #[test]
+    fn deeper_monorepo_path_yields_full_chain() {
+        let roots = vec![PathBuf::from("/home/user/projects")];
+        let project = Path::new("/home/user/projects/foo/packages/web");
+        assert_eq!(project_label(project, &roots), "foo/packages/web");
+    }
+
+    #[test]
+    fn project_equal_to_root_yields_root_basename() {
+        let roots = vec![PathBuf::from("/home/user/projects")];
+        let project = Path::new("/home/user/projects");
+        assert_eq!(project_label(project, &roots), "projects");
+    }
+
+    #[test]
+    fn longest_matching_root_wins() {
+        let roots = vec![
+            PathBuf::from("/home/user/projects"),
+            PathBuf::from("/home/user/projects/motlin.com"),
+        ];
+        let project = Path::new("/home/user/projects/motlin.com/cli");
+        assert_eq!(project_label(project, &roots), "cli");
+    }
+
+    #[test]
+    fn no_matching_root_falls_back_to_basename() {
+        let roots = vec![PathBuf::from("/home/user/projects")];
+        let project = Path::new("/var/tmp/orphan/web");
+        assert_eq!(project_label(project, &roots), "web");
+    }
 }
