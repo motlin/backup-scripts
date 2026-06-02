@@ -143,6 +143,7 @@ pub mod clean_steam;
 pub mod clean_tmp;
 pub mod clean_trash;
 pub mod clean_xcode;
+pub mod clean_xdg_cache;
 pub mod clean_yarn;
 pub mod cleaner;
 pub mod git_maintenance;

@@ -134,6 +134,14 @@ enum Command {
     /// `~/.local/share/mise/installs` is never touched directly.
     CleanMise(commands::clean_mise::Args),
 
+    /// Reclaim disk under the XDG cache (`~/.cache`) via first-party subcommands:
+    /// `uv cache prune` (unreachable entries; never a raw `rm`) and `pre-commit gc`
+    /// (unused hook envs), plus a direct scrub of `~/.cache/node` contents (no
+    /// managing CLI), age-gated by `--node-days`. Each op is skipped when its
+    /// tool/dir is absent. `uv`/`pre-commit` have no dry-run flag, so `--dry-run`
+    /// only logs their intent. Leaves `github-copilot`/`copilot` alone (re-auth risk).
+    CleanXdgCache(commands::clean_xdg_cache::Args),
+
     /// Uninstall non-default rustup toolchains. Only removes toolchains that are
     /// neither active/default nor referenced by a directory override; always via
     /// `rustup toolchain uninstall` (never a raw `rm`). Preview-only unless
@@ -280,6 +288,11 @@ async fn main() -> Result<()> {
         Command::CleanMise(args) => commands::clean_mise::run(args, &cfg.clean_mise, cli.dry_run)
             .await
             .map(drop),
+        Command::CleanXdgCache(args) => {
+            commands::clean_xdg_cache::run(args, &cfg.clean_xdg_cache, cli.dry_run)
+                .await
+                .map(drop)
+        }
         Command::CleanRustup(args) => {
             commands::clean_rustup::run(args, &cfg.clean_rustup, cli.dry_run)
                 .await

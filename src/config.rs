@@ -35,6 +35,7 @@ pub struct AppConfig {
     pub clean_cypress: CleanCypressConfig,
     pub clean_node_gyp: CleanNodeGypConfig,
     pub clean_mise: CleanMiseConfig,
+    pub clean_xdg_cache: CleanXdgCacheConfig,
     pub clean_rustup: CleanRustupConfig,
     pub bz_cleanup: BzCleanupConfig,
     pub all: AllConfig,
@@ -282,6 +283,15 @@ pub struct CleanNodeGypConfig {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CleanMiseConfig {}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanXdgCacheConfig {
+    /// Base XDG cache directory. Default: $XDG_CACHE_HOME or ~/.cache.
+    pub cache_dir: Option<PathBuf>,
+    /// Only scrub node cache entries older than this many days. Default: 14.
+    pub node_days: Option<u32>,
+}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]

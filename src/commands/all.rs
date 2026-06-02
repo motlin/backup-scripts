@@ -13,7 +13,7 @@ use super::{
     clean_cypress, clean_docker, clean_electron_caches, clean_go_build, clean_gradle,
     clean_jetbrains, clean_library_caches, clean_logs, clean_m2, clean_maven, clean_mise,
     clean_node, clean_node_gyp, clean_npm, clean_pip, clean_playwright, clean_pnpm, clean_rustup,
-    clean_steam, clean_tmp, clean_trash, clean_xcode, clean_yarn, git_maintenance,
+    clean_steam, clean_tmp, clean_trash, clean_xcode, clean_xdg_cache, clean_yarn, git_maintenance,
 };
 
 pub const DEFAULT_STEPS: &[&str] = &[
@@ -43,6 +43,7 @@ pub const DEFAULT_STEPS: &[&str] = &[
     "clean-cypress",
     "clean-node-gyp",
     "clean-mise",
+    "clean-xdg-cache",
     "clean-rustup",
     "clean-trash",
     "bz-cleanup",
@@ -240,6 +241,14 @@ pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
                 "clean-mise" => {
                     clean_mise::run(clean_mise::Args::default(), &config.clean_mise, dry_run)
                         .await?
+                }
+                "clean-xdg-cache" => {
+                    clean_xdg_cache::run(
+                        clean_xdg_cache::Args::default(),
+                        &config.clean_xdg_cache,
+                        dry_run,
+                    )
+                    .await?
                 }
                 "clean-rustup" => {
                     clean_rustup::run(clean_rustup::Args::default(), &config.clean_rustup, dry_run)
