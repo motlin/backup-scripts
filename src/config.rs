@@ -33,6 +33,7 @@ pub struct AppConfig {
     pub clean_cypress: CleanCypressConfig,
     pub clean_node_gyp: CleanNodeGypConfig,
     pub clean_mise: CleanMiseConfig,
+    pub clean_rustup: CleanRustupConfig,
     pub bz_cleanup: BzCleanupConfig,
     pub all: AllConfig,
 }
@@ -261,6 +262,14 @@ pub struct CleanNodeGypConfig {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CleanMiseConfig {}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanRustupConfig {
+    /// Actually uninstall removable toolchains. When false (default) the command
+    /// only previews. The active/default/overridden toolchains are always kept.
+    pub remove: Option<bool>,
+}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]

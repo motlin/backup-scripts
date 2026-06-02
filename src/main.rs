@@ -119,6 +119,12 @@ enum Command {
     /// referenced by any tracked config). Versions pinned by a config are kept;
     /// `~/.local/share/mise/installs` is never touched directly.
     CleanMise(commands::clean_mise::Args),
+
+    /// Uninstall non-default rustup toolchains. Only removes toolchains that are
+    /// neither active/default nor referenced by a directory override; always via
+    /// `rustup toolchain uninstall` (never a raw `rm`). Preview-only unless
+    /// `--remove` (or `clean_rustup.remove = true`) is set.
+    CleanRustup(commands::clean_rustup::Args),
 }
 
 #[tokio::main]
@@ -252,5 +258,10 @@ async fn main() -> Result<()> {
         Command::CleanMise(args) => commands::clean_mise::run(args, &cfg.clean_mise, cli.dry_run)
             .await
             .map(drop),
+        Command::CleanRustup(args) => {
+            commands::clean_rustup::run(args, &cfg.clean_rustup, cli.dry_run)
+                .await
+                .map(drop)
+        }
     }
 }

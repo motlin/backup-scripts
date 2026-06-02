@@ -137,6 +137,7 @@ pub mod clean_npm;
 pub mod clean_pip;
 pub mod clean_playwright;
 pub mod clean_pnpm;
+pub mod clean_rustup;
 pub mod clean_tmp;
 pub mod clean_trash;
 pub mod clean_xcode;
