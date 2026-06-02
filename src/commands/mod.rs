@@ -128,6 +128,7 @@ pub mod clean_go_build;
 pub mod clean_gradle;
 pub mod clean_jetbrains;
 pub mod clean_library_caches;
+pub mod clean_logs;
 pub mod clean_m2;
 pub mod clean_maven;
 pub mod clean_mise;

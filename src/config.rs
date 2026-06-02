@@ -26,6 +26,7 @@ pub struct AppConfig {
     pub clean_cocoapods: CleanCocoaPodsConfig,
     pub clean_go_build: CleanGoBuildConfig,
     pub clean_jetbrains: CleanJetBrainsConfig,
+    pub clean_logs: CleanLogsConfig,
     pub clean_library_caches: CleanLibraryCachesConfig,
     pub clean_electron_caches: CleanElectronCachesConfig,
     pub clean_chrome: CleanChromeConfig,
@@ -202,6 +203,14 @@ pub struct CleanGoBuildConfig {}
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CleanJetBrainsConfig {
+    pub cache_dir: Option<PathBuf>,
+    pub days: Option<u32>,
+    pub concurrency: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanLogsConfig {
     pub cache_dir: Option<PathBuf>,
     pub days: Option<u32>,
     pub concurrency: Option<usize>,

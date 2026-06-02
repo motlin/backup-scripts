@@ -85,6 +85,12 @@ enum Command {
     /// the relevant IDEs before running to avoid index corruption.
     CleanJetbrains(commands::clean_jetbrains::Args),
 
+    /// Delete old log files from `~/Library/Logs`, keeping the folder tree so apps
+    /// keep writing. Only files older than `--days` are removed. Skips
+    /// `DiagnosticReports/` (`.ips` crash reports macOS auto-purges) and tolerates
+    /// files locked by an app that is actively writing.
+    CleanLogs(commands::clean_logs::Args),
+
     /// Scrub a configurable list of `~/Library/Caches` subdirs (Chrome, Spotify,
     /// Steam, IINA, app updaters, virtualenv, bazelisk, typescript, …). Removes
     /// each path's contents but keeps the parent dir intact.
@@ -225,6 +231,9 @@ async fn main() -> Result<()> {
                 .await
                 .map(drop)
         }
+        Command::CleanLogs(args) => commands::clean_logs::run(args, &cfg.clean_logs, cli.dry_run)
+            .await
+            .map(drop),
         Command::CleanLibraryCaches(args) => {
             commands::clean_library_caches::run(args, &cfg.clean_library_caches, cli.dry_run)
                 .await

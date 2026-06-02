@@ -11,9 +11,9 @@ use crate::ui::format_duration;
 use super::{
     CommandSummary, bz_cleanup, clean_brew, clean_cargo, clean_chrome, clean_cocoapods,
     clean_cypress, clean_docker, clean_electron_caches, clean_go_build, clean_gradle,
-    clean_jetbrains, clean_library_caches, clean_m2, clean_maven, clean_mise, clean_node,
-    clean_node_gyp, clean_npm, clean_pip, clean_playwright, clean_pnpm, clean_rustup, clean_tmp,
-    clean_trash, clean_xcode, clean_yarn, git_maintenance,
+    clean_jetbrains, clean_library_caches, clean_logs, clean_m2, clean_maven, clean_mise,
+    clean_node, clean_node_gyp, clean_npm, clean_pip, clean_playwright, clean_pnpm, clean_rustup,
+    clean_tmp, clean_trash, clean_xcode, clean_yarn, git_maintenance,
 };
 
 pub const DEFAULT_STEPS: &[&str] = &[
@@ -34,6 +34,7 @@ pub const DEFAULT_STEPS: &[&str] = &[
     "clean-cocoapods",
     "clean-go-build",
     "clean-jetbrains",
+    "clean-logs",
     "clean-library-caches",
     "clean-electron-caches",
     "clean-chrome",
@@ -182,6 +183,10 @@ pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
                         dry_run,
                     )
                     .await?
+                }
+                "clean-logs" => {
+                    clean_logs::run(clean_logs::Args::default(), &config.clean_logs, dry_run)
+                        .await?
                 }
                 "clean-library-caches" => {
                     clean_library_caches::run(
