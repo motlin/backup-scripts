@@ -90,6 +90,13 @@ enum Command {
     /// each path's contents but keeps the parent dir intact.
     CleanLibraryCaches(commands::clean_library_caches::Args),
 
+    /// Delete render/HTTP caches (Cache, Code Cache, GPUCache) from an allowlist
+    /// of Electron desktop apps under `~/Library/Application Support/<App>`
+    /// (Slack, Discord, Superhuman, Termius, WorkFlowy, Wispr Flow, Claude,
+    /// Brave). Never touches Local Storage/IndexedDB/Cookies/Service Worker.
+    /// Quit each app first — an open app can corrupt its caches mid-delete.
+    CleanElectronCaches(commands::clean_electron_caches::Args),
+
     /// Reclaim space under `~/Library/Application Support/Google/Chrome` by
     /// scrubbing on-device model bundles (OptGuide*, SODA*, WasmTtsEngine, …)
     /// and per-profile `Service Worker` caches. Refuses to run while Chrome
@@ -207,6 +214,11 @@ async fn main() -> Result<()> {
         }
         Command::CleanLibraryCaches(args) => {
             commands::clean_library_caches::run(args, &cfg.clean_library_caches, cli.dry_run)
+                .await
+                .map(drop)
+        }
+        Command::CleanElectronCaches(args) => {
+            commands::clean_electron_caches::run(args, &cfg.clean_electron_caches, cli.dry_run)
                 .await
                 .map(drop)
         }

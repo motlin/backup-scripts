@@ -10,9 +10,10 @@ use crate::ui::format_duration;
 
 use super::{
     CommandSummary, bz_cleanup, clean_brew, clean_cargo, clean_chrome, clean_cocoapods,
-    clean_cypress, clean_docker, clean_go_build, clean_gradle, clean_jetbrains,
-    clean_library_caches, clean_m2, clean_maven, clean_node, clean_node_gyp, clean_npm, clean_pip,
-    clean_playwright, clean_pnpm, clean_tmp, clean_trash, clean_xcode, clean_yarn, git_maintenance,
+    clean_cypress, clean_docker, clean_electron_caches, clean_go_build, clean_gradle,
+    clean_jetbrains, clean_library_caches, clean_m2, clean_maven, clean_node, clean_node_gyp,
+    clean_npm, clean_pip, clean_playwright, clean_pnpm, clean_tmp, clean_trash, clean_xcode,
+    clean_yarn, git_maintenance,
 };
 
 pub const DEFAULT_STEPS: &[&str] = &[
@@ -34,6 +35,7 @@ pub const DEFAULT_STEPS: &[&str] = &[
     "clean-go-build",
     "clean-jetbrains",
     "clean-library-caches",
+    "clean-electron-caches",
     "clean-chrome",
     "clean-playwright",
     "clean-cypress",
@@ -183,6 +185,14 @@ pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
                     clean_library_caches::run(
                         clean_library_caches::Args::default(),
                         &config.clean_library_caches,
+                        dry_run,
+                    )
+                    .await?
+                }
+                "clean-electron-caches" => {
+                    clean_electron_caches::run(
+                        clean_electron_caches::Args::default(),
+                        &config.clean_electron_caches,
                         dry_run,
                     )
                     .await?

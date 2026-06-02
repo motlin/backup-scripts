@@ -123,6 +123,7 @@ pub mod clean_chrome;
 pub mod clean_cocoapods;
 pub mod clean_cypress;
 pub mod clean_docker;
+pub mod clean_electron_caches;
 pub mod clean_go_build;
 pub mod clean_gradle;
 pub mod clean_jetbrains;
