@@ -13,7 +13,7 @@ use super::{
     clean_cypress, clean_docker, clean_electron_caches, clean_go_build, clean_gradle,
     clean_jetbrains, clean_library_caches, clean_logs, clean_m2, clean_maven, clean_mise,
     clean_node, clean_node_gyp, clean_npm, clean_pip, clean_playwright, clean_pnpm, clean_rustup,
-    clean_tmp, clean_trash, clean_xcode, clean_yarn, git_maintenance,
+    clean_steam, clean_tmp, clean_trash, clean_xcode, clean_yarn, git_maintenance,
 };
 
 pub const DEFAULT_STEPS: &[&str] = &[
@@ -38,6 +38,7 @@ pub const DEFAULT_STEPS: &[&str] = &[
     "clean-library-caches",
     "clean-electron-caches",
     "clean-chrome",
+    "clean-steam",
     "clean-playwright",
     "clean-cypress",
     "clean-node-gyp",
@@ -206,6 +207,10 @@ pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
                 }
                 "clean-chrome" => {
                     clean_chrome::run(clean_chrome::Args::default(), &config.clean_chrome, dry_run)
+                        .await?
+                }
+                "clean-steam" => {
+                    clean_steam::run(clean_steam::Args::default(), &config.clean_steam, dry_run)
                         .await?
                 }
                 "clean-playwright" => {

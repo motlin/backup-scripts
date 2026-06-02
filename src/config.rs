@@ -30,6 +30,7 @@ pub struct AppConfig {
     pub clean_library_caches: CleanLibraryCachesConfig,
     pub clean_electron_caches: CleanElectronCachesConfig,
     pub clean_chrome: CleanChromeConfig,
+    pub clean_steam: CleanSteamConfig,
     pub clean_playwright: CleanPlaywrightConfig,
     pub clean_cypress: CleanCypressConfig,
     pub clean_node_gyp: CleanNodeGypConfig,
@@ -239,6 +240,16 @@ pub struct CleanChromeConfig {
     pub chrome_dir: Option<PathBuf>,
     pub model_dirs: Option<Vec<String>>,
     pub profile_subdirs: Option<Vec<String>>,
+    pub days: Option<u32>,
+    pub concurrency: Option<usize>,
+    pub skip_running_check: Option<bool>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanSteamConfig {
+    pub steam_dir: Option<PathBuf>,
+    pub cache_dirs: Option<Vec<String>>,
     pub days: Option<u32>,
     pub concurrency: Option<usize>,
     pub skip_running_check: Option<bool>,

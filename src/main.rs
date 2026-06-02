@@ -111,6 +111,14 @@ enum Command {
     /// demand; sites re-cache on next visit.
     CleanChrome(commands::clean_chrome::Args),
 
+    /// Scrub regenerable Steam caches under `~/Library/Application Support/Steam`:
+    /// the CONTENTS of `steamapps/shadercache`, `steamapps/downloading`, and
+    /// `appcache` (each dir is kept). Never touches `steamapps/common` (installed
+    /// games) or the `steamapps/*.acf` manifests. Quit Steam first — an open
+    /// client holds file locks and can corrupt these caches mid-delete; the step
+    /// is skipped while Steam is running unless `--skip-running-check`/`--dry-run`.
+    CleanSteam(commands::clean_steam::Args),
+
     /// Delete stale Playwright browser-version dirs (~/Library/Caches/ms-playwright/*).
     CleanPlaywright(commands::clean_playwright::Args),
 
@@ -246,6 +254,11 @@ async fn main() -> Result<()> {
         }
         Command::CleanChrome(args) => {
             commands::clean_chrome::run(args, &cfg.clean_chrome, cli.dry_run)
+                .await
+                .map(drop)
+        }
+        Command::CleanSteam(args) => {
+            commands::clean_steam::run(args, &cfg.clean_steam, cli.dry_run)
                 .await
                 .map(drop)
         }
