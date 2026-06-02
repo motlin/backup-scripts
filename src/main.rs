@@ -99,9 +99,10 @@ enum Command {
 
     /// Reclaim space under `~/Library/Application Support/Google/Chrome` by
     /// scrubbing on-device model bundles (OptGuide*, SODA*, WasmTtsEngine, …)
-    /// and per-profile `Service Worker` caches. Refuses to run while Chrome
-    /// is open. Chrome re-downloads models on demand; sites re-register
-    /// service workers on next visit.
+    /// and per-profile `Service Worker/CacheStorage` offline snapshots (the
+    /// largest Chrome cache; SW registrations and auth are left intact).
+    /// Refuses to run while Chrome is open. Chrome re-downloads models on
+    /// demand; sites re-cache on next visit.
     CleanChrome(commands::clean_chrome::Args),
 
     /// Delete stale Playwright browser-version dirs (~/Library/Caches/ms-playwright/*).

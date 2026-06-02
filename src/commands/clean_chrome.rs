@@ -30,9 +30,13 @@ const DEFAULT_MODEL_DIRS: &[&str] = &[
     "OnDeviceHeadSuggestModel",
 ];
 
-/// Per-profile subdirs to scrub. `Service Worker` holds the bulk of cached
-/// site state — sites re-register on next visit.
-const DEFAULT_PROFILE_SUBDIRS: &[&str] = &["Service Worker"];
+/// Per-profile subdirs to scrub. `Service Worker/CacheStorage` holds offline
+/// snapshots cached by service workers (the single largest Chrome cache on
+/// disk) — sites re-fetch and re-cache on next visit. Scoped to `CacheStorage`
+/// so the sibling `Service Worker/Database` (SW registrations) and
+/// `Service Worker/ScriptCache` are left untouched. Auth lives in
+/// `Cookies`/`IndexedDB` and is unaffected.
+const DEFAULT_PROFILE_SUBDIRS: &[&str] = &["Service Worker/CacheStorage"];
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
@@ -342,4 +346,125 @@ fn read_children(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
         out.push(entry.path());
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Deterministic, self-cleaning fixture root under the OS temp dir. Scoped by
+    /// pid + `tag` so concurrent tests don't collide; removed and recreated fresh.
+    fn fixture_root(tag: &str) -> PathBuf {
+        let base =
+            std::env::temp_dir().join(format!("backup-clean-chrome-{}-{tag}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        base
+    }
+
+    fn default_subdirs() -> Vec<String> {
+        DEFAULT_PROFILE_SUBDIRS
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn default_profile_subdir_is_scoped_to_cachestorage() {
+        assert_eq!(
+            DEFAULT_PROFILE_SUBDIRS,
+            &["Service Worker/CacheStorage"],
+            "must scope to the CacheStorage subdir, not the whole Service Worker dir"
+        );
+    }
+
+    #[test]
+    fn collect_targets_selects_cachestorage_not_sw_siblings() {
+        let chrome = fixture_root("cachestorage");
+        let sw = chrome.join("Default").join("Service Worker");
+        // The cache we want to scrub.
+        std::fs::create_dir_all(sw.join("CacheStorage")).unwrap();
+        // Siblings that must NEVER be selected: SW registrations + script cache.
+        std::fs::create_dir_all(sw.join("Database")).unwrap();
+        std::fs::create_dir_all(sw.join("ScriptCache")).unwrap();
+        // Auth state that must NEVER be selected.
+        std::fs::create_dir_all(chrome.join("Default").join("IndexedDB")).unwrap();
+
+        let targets = collect_targets(&chrome, &[], &default_subdirs());
+
+        assert_eq!(
+            targets,
+            vec![sw.join("CacheStorage")],
+            "only Service Worker/CacheStorage, never Database/ScriptCache/IndexedDB"
+        );
+
+        std::fs::remove_dir_all(&chrome).unwrap();
+    }
+
+    #[test]
+    fn collect_targets_iterates_all_profiles() {
+        let chrome = fixture_root("profiles");
+        for profile in ["Default", "Profile 1", "Profile 2"] {
+            std::fs::create_dir_all(
+                chrome
+                    .join(profile)
+                    .join("Service Worker")
+                    .join("CacheStorage"),
+            )
+            .unwrap();
+        }
+        // A non-profile dir that happens to contain the subdir must be ignored.
+        std::fs::create_dir_all(
+            chrome
+                .join("System Profile")
+                .join("Service Worker")
+                .join("CacheStorage"),
+        )
+        .unwrap();
+
+        let targets = collect_targets(&chrome, &[], &default_subdirs());
+
+        assert_eq!(
+            targets,
+            vec![
+                chrome
+                    .join("Default")
+                    .join("Service Worker")
+                    .join("CacheStorage"),
+                chrome
+                    .join("Profile 1")
+                    .join("Service Worker")
+                    .join("CacheStorage"),
+                chrome
+                    .join("Profile 2")
+                    .join("Service Worker")
+                    .join("CacheStorage"),
+            ],
+            "every Default/Profile N dir is scanned; non-profile dirs are skipped"
+        );
+
+        std::fs::remove_dir_all(&chrome).unwrap();
+    }
+
+    #[test]
+    fn collect_targets_skips_missing_cachestorage() {
+        let chrome = fixture_root("missing");
+        // Profile exists with a Service Worker dir but no CacheStorage child.
+        std::fs::create_dir_all(
+            chrome
+                .join("Default")
+                .join("Service Worker")
+                .join("Database"),
+        )
+        .unwrap();
+
+        let targets = collect_targets(&chrome, &[], &default_subdirs());
+
+        assert!(
+            targets.is_empty(),
+            "no CacheStorage dir means nothing to clean"
+        );
+
+        std::fs::remove_dir_all(&chrome).unwrap();
+    }
 }
