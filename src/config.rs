@@ -32,6 +32,7 @@ pub struct AppConfig {
     pub clean_playwright: CleanPlaywrightConfig,
     pub clean_cypress: CleanCypressConfig,
     pub clean_node_gyp: CleanNodeGypConfig,
+    pub clean_mise: CleanMiseConfig,
     pub bz_cleanup: BzCleanupConfig,
     pub all: AllConfig,
 }
@@ -256,6 +257,10 @@ pub struct CleanNodeGypConfig {
     pub days: Option<u32>,
     pub concurrency: Option<usize>,
 }
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanMiseConfig {}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]

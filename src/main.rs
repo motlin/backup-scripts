@@ -113,6 +113,12 @@ enum Command {
 
     /// Delete stale node-gyp per-Node-version header dirs (~/Library/Caches/node-gyp/*).
     CleanNodeGyp(commands::clean_node_gyp::Args),
+
+    /// Reclaim mise disk usage without removing in-use tools: `mise cache prune`
+    /// (age-based cache GC) plus `mise prune` (removes tool versions no longer
+    /// referenced by any tracked config). Versions pinned by a config are kept;
+    /// `~/.local/share/mise/installs` is never touched directly.
+    CleanMise(commands::clean_mise::Args),
 }
 
 #[tokio::main]
@@ -243,5 +249,8 @@ async fn main() -> Result<()> {
                 .await
                 .map(drop)
         }
+        Command::CleanMise(args) => commands::clean_mise::run(args, &cfg.clean_mise, cli.dry_run)
+            .await
+            .map(drop),
     }
 }
