@@ -111,6 +111,12 @@ pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
         // step failed mid-run, before propagating that failure.
         print_aggregate_summary(&results, started.elapsed());
 
+        if let Some(command) = rerun_command(&results, dry_run) {
+            let skipped = results.iter().filter(|r| r.summary.skipped()).count();
+            info!("all: {skipped} cleaner(s) skipped. Re-run just those:");
+            info!("  {command}");
+        }
+
         outcome
     }
     .instrument(info_span!("all"))
@@ -392,6 +398,25 @@ fn print_aggregate_summary(results: &[StepResult], elapsed: std::time::Duration)
     );
 }
 
+/// Build the `backup all --only …` command that re-runs exactly the steps that
+/// were skipped at runtime (`summary.skipped()`), in step order. Returns `None`
+/// when nothing was skipped. Includes `--dry-run` when the original run was a
+/// dry run.
+fn rerun_command(results: &[StepResult], dry_run: bool) -> Option<String> {
+    let only_args: Vec<String> = results
+        .iter()
+        .filter(|r| r.summary.skipped())
+        .map(|r| format!("--only {}", r.name))
+        .collect();
+
+    if only_args.is_empty() {
+        return None;
+    }
+
+    let dry = if dry_run { " --dry-run" } else { "" };
+    Some(format!("backup all{dry} {}", only_args.join(" ")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -442,6 +467,37 @@ mod tests {
         assert!(
             outcome.unwrap_err().to_string().contains("not-a-real-step"),
             "error should name the offending step",
+        );
+    }
+
+    #[test]
+    fn rerun_command_is_none_when_nothing_skipped() {
+        let results = vec![
+            step("a", CommandSummary::ok_one()),
+            step("b", CommandSummary::failed_one()),
+        ];
+        assert_eq!(rerun_command(&results, false), None);
+    }
+
+    #[test]
+    fn rerun_command_lists_skipped_steps_in_order() {
+        let results = vec![
+            step("clean-chrome", CommandSummary::skipped_one()),
+            step("clean-node", CommandSummary::ok_one()),
+            step("clean-steam", CommandSummary::skipped_one()),
+        ];
+        assert_eq!(
+            rerun_command(&results, false),
+            Some("backup all --only clean-chrome --only clean-steam".to_string())
+        );
+    }
+
+    #[test]
+    fn rerun_command_includes_dry_run_flag() {
+        let results = vec![step("clean-chrome", CommandSummary::skipped_one())];
+        assert_eq!(
+            rerun_command(&results, true),
+            Some("backup all --dry-run --only clean-chrome".to_string())
         );
     }
 
