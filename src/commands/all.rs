@@ -60,6 +60,23 @@ pub struct Args {
     /// Names match `all.steps` entries, e.g. `git-maintenance`, `clean-tmp`.
     #[arg(long = "skip")]
     pub skip: Vec<String>,
+
+    /// Run only these steps (by name), in `all.steps` order. Inverse of `--skip`.
+    /// Names match `all.steps` entries. Repeatable.
+    #[arg(long = "only")]
+    pub only: Vec<String>,
+}
+
+/// Validate that every name in `names` is a known step, returning an error
+/// naming the first unknown one.
+fn validate_steps(names: &[String]) -> Result<()> {
+    let known: HashSet<&str> = DEFAULT_STEPS.iter().copied().collect();
+    for name in names {
+        if !known.contains(name.as_str()) {
+            bail!("unknown step: {name}");
+        }
+    }
+    Ok(())
 }
 
 pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
@@ -70,14 +87,15 @@ pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
         .unwrap_or_else(|| DEFAULT_STEPS.iter().map(|s| s.to_string()).collect());
 
     if !args.skip.is_empty() {
-        let known: HashSet<&str> = DEFAULT_STEPS.iter().copied().collect();
-        for name in &args.skip {
-            if !known.contains(name.as_str()) {
-                bail!("unknown step in --skip: {name}");
-            }
-        }
+        validate_steps(&args.skip)?;
         let skip: HashSet<&str> = args.skip.iter().map(String::as_str).collect();
         steps.retain(|s| !skip.contains(s.as_str()));
+    }
+
+    if !args.only.is_empty() {
+        validate_steps(&args.only)?;
+        let only: HashSet<&str> = args.only.iter().map(String::as_str).collect();
+        steps.retain(|s| only.contains(s.as_str()));
     }
 
     async move {
