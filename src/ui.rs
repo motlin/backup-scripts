@@ -16,6 +16,23 @@ use tracing_subscriber::fmt::MakeWriter;
 
 static MP: OnceLock<MultiProgress> = OnceLock::new();
 static INTERACTIVE: OnceLock<bool> = OnceLock::new();
+static USE_COLOR: OnceLock<bool> = OnceLock::new();
+
+// Dependency-free SGR (Select Graphic Rendition) escapes, matching the repo's
+// existing hand-rolled ANSI in indicatif templates — no new crate.
+// Consumed by the colorize_* render helpers added in later steps.
+#[allow(dead_code)]
+const RESET: &str = "\x1b[0m";
+#[allow(dead_code)]
+const DIM: &str = "\x1b[2m"; // B, ms
+#[allow(dead_code)]
+const BLUE: &str = "\x1b[34m"; // KiB
+#[allow(dead_code)]
+const GREEN: &str = "\x1b[32m"; // MiB, s
+#[allow(dead_code)]
+const YELLOW: &str = "\x1b[33m"; // GiB, m
+#[allow(dead_code)]
+const RED: &str = "\x1b[31m"; // TiB+, h
 
 pub fn init() {
     let mp = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(8));
@@ -31,6 +48,14 @@ pub fn mp() -> &'static MultiProgress {
 /// drops every line — so callers must fall back to plain stderr instead.
 pub fn interactive() -> bool {
     *INTERACTIVE.get_or_init(|| io::stderr().is_terminal())
+}
+
+/// Whether to emit ANSI color escapes. Gated on an interactive TTY and the
+/// absence of the `NO_COLOR` environment variable. Memoized like `interactive`.
+/// Consumed by `format_detail` in a later step.
+#[allow(dead_code)]
+fn use_color() -> bool {
+    *USE_COLOR.get_or_init(|| interactive() && std::env::var_os("NO_COLOR").is_none())
 }
 
 /// Emit one scrollback line. In a terminal it goes through `MultiProgress` so the
@@ -265,6 +290,24 @@ impl io::Write for MpHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ansi_constants_are_sgr_escapes() {
+        assert_eq!(RESET, "\x1b[0m");
+        assert_eq!(DIM, "\x1b[2m");
+        assert_eq!(BLUE, "\x1b[34m");
+        assert_eq!(GREEN, "\x1b[32m");
+        assert_eq!(YELLOW, "\x1b[33m");
+        assert_eq!(RED, "\x1b[31m");
+    }
+
+    #[test]
+    fn use_color_is_disabled_without_a_tty() {
+        // The test harness runs without an interactive stderr, so color gating
+        // is off regardless of NO_COLOR. Guards the `interactive()` precondition.
+        assert!(!interactive());
+        assert!(!use_color());
+    }
 
     #[test]
     fn format_duration_under_100ms() {
