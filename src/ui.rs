@@ -20,18 +20,11 @@ static USE_COLOR: OnceLock<bool> = OnceLock::new();
 
 // Dependency-free SGR (Select Graphic Rendition) escapes, matching the repo's
 // existing hand-rolled ANSI in indicatif templates — no new crate.
-// Consumed by the colorize_* render helpers added in later steps.
-#[allow(dead_code)]
 const RESET: &str = "\x1b[0m";
-#[allow(dead_code)]
 const DIM: &str = "\x1b[2m"; // B, ms
-#[allow(dead_code)]
 const BLUE: &str = "\x1b[34m"; // KiB
-#[allow(dead_code)]
 const GREEN: &str = "\x1b[32m"; // MiB, s
-#[allow(dead_code)]
 const YELLOW: &str = "\x1b[33m"; // GiB, m
-#[allow(dead_code)]
 const RED: &str = "\x1b[31m"; // TiB+, h
 
 pub fn init() {
@@ -52,8 +45,6 @@ pub fn interactive() -> bool {
 
 /// Whether to emit ANSI color escapes. Gated on an interactive TTY and the
 /// absence of the `NO_COLOR` environment variable. Memoized like `interactive`.
-/// Consumed by `format_detail` in a later step.
-#[allow(dead_code)]
 fn use_color() -> bool {
     *USE_COLOR.get_or_init(|| interactive() && std::env::var_os("NO_COLOR").is_none())
 }
@@ -200,6 +191,12 @@ impl ItemDetail {
 /// Missing size or duration are rendered as blank padding so subsequent columns
 /// still line up. Failure (no size, no duration) is rendered as `<verb> <suffix>`.
 pub fn format_detail(d: &ItemDetail) -> String {
+    format_detail_colored(d, use_color())
+}
+
+/// Inner implementation of [`format_detail`] with explicit color gating, so tests
+/// can render deterministically regardless of whether the runner has a TTY.
+fn format_detail_colored(d: &ItemDetail, color: bool) -> String {
     let verb = pad_right(&d.verb, VERB_COL_WIDTH);
 
     if d.size.is_none() && d.duration.is_none() {
@@ -209,10 +206,18 @@ pub fn format_detail(d: &ItemDetail) -> String {
         };
     }
 
-    let size = pad_right(d.size.as_deref().unwrap_or(""), SIZE_COL_WIDTH);
+    let size_plain = d.size.as_deref().unwrap_or("");
+    let size = pad_right_colored(
+        size_plain,
+        &colorize_size(size_plain, color),
+        SIZE_COL_WIDTH,
+    );
 
     let tail = match &d.duration {
-        Some(dur) => format!(" in {}", pad_right(dur, DURATION_COL_WIDTH)),
+        Some(dur) => format!(
+            " in {}",
+            pad_right_colored(dur, &colorize_duration(dur, color), DURATION_COL_WIDTH)
+        ),
         None => " ".repeat(DURATION_COL_WIDTH + 4),
     };
 
@@ -245,7 +250,6 @@ pub fn format_duration(ms: u64) -> String {
 /// ANSI color chosen by the magnitude of its unit: `B` dim, `KiB` blue, `MiB` green,
 /// `GiB` yellow, `TiB`/`PiB`/`EiB` red. Returns `plain` unchanged when `!enabled`,
 /// when `plain` is empty, or when the trailing unit is unrecognized.
-#[allow(dead_code)]
 fn colorize_size(plain: &str, enabled: bool) -> String {
     if !enabled || plain.is_empty() {
         return plain.to_string();
@@ -267,7 +271,6 @@ fn colorize_size(plain: &str, enabled: bool) -> String {
 /// `ms` dim, `s` green, `m` yellow, `h` red (checking `ms` before `s`). Returns
 /// `plain` unchanged when `!enabled`; a segment with an unrecognized unit is
 /// emitted without color.
-#[allow(dead_code)]
 fn colorize_duration(plain: &str, enabled: bool) -> String {
     if !enabled {
         return plain.to_string();
@@ -295,8 +298,6 @@ fn colorize_duration(plain: &str, enabled: bool) -> String {
 /// Pad a colored string to `width` visible columns. Padding is computed from the
 /// `plain` (ANSI-free) string so embedded SGR escapes in `colored` don't corrupt
 /// the count. Returns `colored` unchanged when it already meets or exceeds `width`.
-/// Consumed by `format_detail` in a later step.
-#[allow(dead_code)]
 fn pad_right_colored(plain: &str, colored: &str, width: usize) -> String {
     let len = plain.chars().count();
     if len >= width {
@@ -512,14 +513,21 @@ mod tests {
     #[test]
     fn format_detail_success() {
         let d = ItemDetail::success("freed", "4 KiB", "2.1s");
-        assert_eq!(format_detail(&d), "freed        4 KiB      in 2.1s");
+        assert_eq!(
+            format_detail_colored(&d, false),
+            "freed        4 KiB      in 2.1s"
+        );
     }
 
     #[test]
     fn format_detail_no_change_aligns_with_freed() {
-        let no_change = format_detail(&ItemDetail::success("no change", "124 KiB", "1.1s"));
-        let freed = format_detail(&ItemDetail::success("freed", "4 KiB", "2.1s"));
-        let big = format_detail(&ItemDetail::success("no change", "164.54 MiB", "1.2s"));
+        let no_change =
+            format_detail_colored(&ItemDetail::success("no change", "124 KiB", "1.1s"), false);
+        let freed = format_detail_colored(&ItemDetail::success("freed", "4 KiB", "2.1s"), false);
+        let big = format_detail_colored(
+            &ItemDetail::success("no change", "164.54 MiB", "1.2s"),
+            false,
+        );
         let no_change_in = no_change.find(" in ").unwrap();
         let freed_in = freed.find(" in ").unwrap();
         let big_in = big.find(" in ").unwrap();
@@ -530,7 +538,7 @@ mod tests {
     #[test]
     fn format_detail_dry_run_drops_duration() {
         let d = ItemDetail::dry_run("would delete", "1 KiB");
-        let s = format_detail(&d);
+        let s = format_detail_colored(&d, false);
         assert!(!s.contains(" in "));
         assert!(s.starts_with("would delete "));
         assert!(s.contains("1 KiB"));
@@ -539,7 +547,7 @@ mod tests {
     #[test]
     fn format_detail_failure_renders_suffix() {
         let d = ItemDetail::failure("permission denied (os error 13)");
-        let s = format_detail(&d);
+        let s = format_detail_colored(&d, false);
         assert_eq!(s, "failed       permission denied (os error 13)");
         assert!(!s.contains(" in "));
     }
@@ -547,7 +555,7 @@ mod tests {
     #[test]
     fn format_detail_plus_verb() {
         let d = ItemDetail::success("+", "4 KiB", "1.0s");
-        let s = format_detail(&d);
+        let s = format_detail_colored(&d, false);
         assert!(s.starts_with("+           "));
         assert!(s.contains("4 KiB"));
         assert!(s.contains("in 1.0s"));
@@ -556,8 +564,43 @@ mod tests {
     #[test]
     fn format_detail_with_fsck_suffix() {
         let d = ItemDetail::success("freed", "4 KiB", "2.1s").with_suffix("; fsck: 3 dangling");
-        let s = format_detail(&d);
+        let s = format_detail_colored(&d, false);
         assert!(s.ends_with("; fsck: 3 dangling"));
         assert!(s.contains("in 2.1s"));
+    }
+
+    #[test]
+    fn format_detail_colored_preserves_column_positions() {
+        // Coloring the amounts must not shift the visible columns: the `" in "`
+        // index computed after stripping ANSI escapes must match the plain render.
+        let d = ItemDetail::success("freed", "4 KiB", "2.1s");
+        let plain = format_detail_colored(&d, false);
+        let colored = format_detail_colored(&d, true);
+
+        assert_ne!(plain, colored);
+        assert!(colored.contains("\x1b["));
+
+        let stripped: String = strip_ansi(&colored);
+        assert_eq!(stripped, plain);
+        assert_eq!(stripped.find(" in "), plain.find(" in "));
+    }
+
+    /// Remove SGR escape sequences (`\x1b[...m`) so a colored render can be
+    /// compared against its plain counterpart.
+    fn strip_ansi(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut chars = s.chars();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                for inner in chars.by_ref() {
+                    if inner == 'm' {
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
     }
 }
