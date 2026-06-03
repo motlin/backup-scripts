@@ -453,7 +453,7 @@ fn delta_components(before: u64, after: u64) -> (&'static str, String) {
     } else if after > before {
         ("+", format_size(after - before, BINARY))
     } else {
-        ("no change", format_size(before, BINARY))
+        ("no change", String::new())
     }
 }
 
@@ -594,5 +594,21 @@ mod tests {
             freed_summary(1048576, 3 * 1048576),
             "grew by 2 MiB (1 MiB reclaimed, 3 MiB added back)"
         );
+    }
+
+    #[test]
+    fn delta_components_branches() {
+        let (verb, size) = delta_components(1000, 600);
+        assert_eq!(verb, "freed");
+        assert_eq!(size, format_size(400u64, BINARY));
+
+        let (verb, size) = delta_components(600, 1000);
+        assert_eq!(verb, "+");
+        assert_eq!(size, format_size(400u64, BINARY));
+
+        // No change: verb conveys the result, size column is left blank.
+        let (verb, size) = delta_components(1000, 1000);
+        assert_eq!(verb, "no change");
+        assert_eq!(size, "");
     }
 }
