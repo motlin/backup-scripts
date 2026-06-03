@@ -406,6 +406,34 @@ async fn run_fsck(repo: &std::path::Path) -> String {
         .join(", ")
 }
 
+/// Short net phrase for the live bar and the lead of the summary.
+// Used by tests now; wired into run()/maintain_one() in the green half of this TDD pair.
+#[allow(dead_code)]
+fn net_phrase(reclaimed: u64, added: u64) -> String {
+    if added > reclaimed {
+        format!("grew by {}", format_size(added - reclaimed, BINARY))
+    } else {
+        format!("{} freed", format_size(reclaimed - added, BINARY))
+    }
+}
+
+/// Full summary fragment: net phrase plus a reclaimed/added breakdown when
+/// any repo grew during maintenance.
+// Used by tests now; wired into run() in the green half of this TDD pair.
+#[allow(dead_code)]
+fn freed_summary(reclaimed: u64, added: u64) -> String {
+    let net = net_phrase(reclaimed, added);
+    if added == 0 {
+        net
+    } else {
+        format!(
+            "{net} ({} reclaimed, {} added back)",
+            format_size(reclaimed, BINARY),
+            format_size(added, BINARY),
+        )
+    }
+}
+
 fn delta_components(before: u64, after: u64) -> (&'static str, String) {
     if after < before {
         ("freed", format_size(before - after, BINARY))
@@ -523,5 +551,35 @@ mod tests {
         let overrides = vec![over("a", &["gc"])];
         let err = validate_overrides(&overrides).unwrap_err().to_string();
         assert!(err.contains("gc"), "error should name the bad step: {err}");
+    }
+
+    #[test]
+    fn net_phrase_shrink_equal_grow() {
+        assert_eq!(net_phrase(1024, 0), "1 KiB freed");
+        assert_eq!(net_phrase(1048576, 1048576), "0 B freed");
+        assert_eq!(net_phrase(0, 0), "0 B freed");
+        assert_eq!(net_phrase(1048576, 3 * 1048576), "grew by 2 MiB");
+    }
+
+    #[test]
+    fn freed_summary_no_growth_omits_parenthetical() {
+        assert_eq!(freed_summary(1024, 0), "1 KiB freed");
+        assert_eq!(freed_summary(0, 0), "0 B freed");
+    }
+
+    #[test]
+    fn freed_summary_net_positive_with_growth() {
+        assert_eq!(
+            freed_summary(3 * 1048576, 1048576),
+            "2 MiB freed (3 MiB reclaimed, 1 MiB added back)"
+        );
+    }
+
+    #[test]
+    fn freed_summary_net_negative_with_growth() {
+        assert_eq!(
+            freed_summary(1048576, 3 * 1048576),
+            "grew by 2 MiB (1 MiB reclaimed, 3 MiB added back)"
+        );
     }
 }
