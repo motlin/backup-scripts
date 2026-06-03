@@ -241,6 +241,27 @@ pub fn format_duration(ms: u64) -> String {
     }
 }
 
+/// Wrap a `humansize::format_size(_, BINARY)` string (e.g. `4 KiB`, `512 B`) in an
+/// ANSI color chosen by the magnitude of its unit: `B` dim, `KiB` blue, `MiB` green,
+/// `GiB` yellow, `TiB`/`PiB`/`EiB` red. Returns `plain` unchanged when `!enabled`,
+/// when `plain` is empty, or when the trailing unit is unrecognized.
+#[allow(dead_code)]
+fn colorize_size(plain: &str, enabled: bool) -> String {
+    if !enabled || plain.is_empty() {
+        return plain.to_string();
+    }
+    let unit = plain.split_whitespace().next_back().unwrap_or("");
+    let color = match unit {
+        "B" => DIM,
+        "KiB" => BLUE,
+        "MiB" => GREEN,
+        "GiB" => YELLOW,
+        "TiB" | "PiB" | "EiB" => RED,
+        _ => return plain.to_string(),
+    };
+    format!("{color}{plain}{RESET}")
+}
+
 pub fn pad_right(s: &str, width: usize) -> String {
     let len = s.chars().count();
     if len >= width {
@@ -329,6 +350,57 @@ mod tests {
         assert_eq!(format_duration(60_000), "1m 0s");
         assert_eq!(format_duration(135_000), "2m 15s");
         assert_eq!(format_duration(3_600_000), "60m 0s");
+    }
+
+    #[test]
+    fn colorize_size_disabled_returns_plain() {
+        assert_eq!(colorize_size("4 KiB", false), "4 KiB");
+        assert_eq!(colorize_size("164.54 MiB", false), "164.54 MiB");
+    }
+
+    #[test]
+    fn colorize_size_empty_returns_plain() {
+        assert_eq!(colorize_size("", true), "");
+        assert_eq!(colorize_size("", false), "");
+    }
+
+    #[test]
+    fn colorize_size_bytes_dim() {
+        assert_eq!(colorize_size("512 B", true), format!("{DIM}512 B{RESET}"));
+    }
+
+    #[test]
+    fn colorize_size_kib_blue() {
+        assert_eq!(colorize_size("4 KiB", true), format!("{BLUE}4 KiB{RESET}"));
+    }
+
+    #[test]
+    fn colorize_size_mib_green() {
+        assert_eq!(
+            colorize_size("164.54 MiB", true),
+            format!("{GREEN}164.54 MiB{RESET}")
+        );
+    }
+
+    #[test]
+    fn colorize_size_gib_yellow() {
+        assert_eq!(
+            colorize_size("1.2 GiB", true),
+            format!("{YELLOW}1.2 GiB{RESET}")
+        );
+    }
+
+    #[test]
+    fn colorize_size_large_units_red() {
+        assert_eq!(colorize_size("3 TiB", true), format!("{RED}3 TiB{RESET}"));
+        assert_eq!(colorize_size("3 PiB", true), format!("{RED}3 PiB{RESET}"));
+        assert_eq!(colorize_size("3 EiB", true), format!("{RED}3 EiB{RESET}"));
+    }
+
+    #[test]
+    fn colorize_size_unknown_unit_returns_plain() {
+        assert_eq!(colorize_size("7 widgets", true), "7 widgets");
+        assert_eq!(colorize_size("nonsense", true), "nonsense");
     }
 
     #[test]
