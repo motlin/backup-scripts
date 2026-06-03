@@ -292,6 +292,20 @@ fn colorize_duration(plain: &str, enabled: bool) -> String {
         .join(" ")
 }
 
+/// Pad a colored string to `width` visible columns. Padding is computed from the
+/// `plain` (ANSI-free) string so embedded SGR escapes in `colored` don't corrupt
+/// the count. Returns `colored` unchanged when it already meets or exceeds `width`.
+/// Consumed by `format_detail` in a later step.
+#[allow(dead_code)]
+fn pad_right_colored(plain: &str, colored: &str, width: usize) -> String {
+    let len = plain.chars().count();
+    if len >= width {
+        colored.to_string()
+    } else {
+        format!("{colored}{}", " ".repeat(width - len))
+    }
+}
+
 pub fn pad_right(s: &str, width: usize) -> String {
     let len = s.chars().count();
     if len >= width {
@@ -465,6 +479,33 @@ mod tests {
         assert_eq!(
             colorize_duration("1h 5m", true),
             format!("{RED}1h{RESET} {YELLOW}5m{RESET}")
+        );
+    }
+
+    #[test]
+    fn pad_right_colored_pads_from_plain_width() {
+        let plain = "4 KiB";
+        let colored = format!("{BLUE}4 KiB{RESET}");
+        assert_eq!(
+            pad_right_colored(plain, &colored, 10),
+            format!("{BLUE}4 KiB{RESET}     ")
+        );
+    }
+
+    #[test]
+    fn pad_right_colored_no_pad_when_at_or_over_width() {
+        let plain = "164.54 MiB";
+        let colored = format!("{GREEN}164.54 MiB{RESET}");
+        assert_eq!(pad_right_colored(plain, &colored, 10), colored);
+        assert_eq!(pad_right_colored(plain, &colored, 5), colored);
+    }
+
+    #[test]
+    fn pad_right_colored_plain_input_matches_pad_right() {
+        // With no ANSI in `colored`, the helper behaves like `pad_right`.
+        assert_eq!(
+            pad_right_colored("4 KiB", "4 KiB", 10),
+            pad_right("4 KiB", 10)
         );
     }
 
