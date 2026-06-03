@@ -220,7 +220,7 @@ pub async fn run(
 
         let bar = Arc::new(CommandBar::new("git-maintenance", repos.len() as u64));
         let items: Arc<Mutex<Vec<TreeItem>>> = Arc::new(Mutex::new(Vec::new()));
-        let total_freed = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let totals = Arc::new(Totals::default());
 
         let max_label = repos
             .iter()
@@ -235,11 +235,11 @@ pub async fn run(
             let sem = Arc::clone(&sem);
             let bar = Arc::clone(&bar);
             let items = Arc::clone(&items);
-            let total_freed = Arc::clone(&total_freed);
+            let totals = Arc::clone(&totals);
             set.spawn(
                 async move {
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                    maintain_one(repo, max_label, &bar, &items, &total_freed, fsck, &skip).await;
+                    maintain_one(repo, max_label, &bar, &items, &totals, fsck, &skip).await;
                 }
                 .in_current_span(),
             );
@@ -252,10 +252,12 @@ pub async fn run(
             .unwrap_or_default();
         let ok_count = items.iter().filter(|i| i.ok).count();
         let fail_count = items.len() - ok_count;
-        let freed = total_freed.load(std::sync::atomic::Ordering::Relaxed);
+        let reclaimed = totals.reclaimed.load(std::sync::atomic::Ordering::Relaxed);
+        let added = totals.added.load(std::sync::atomic::Ordering::Relaxed);
+        let net = reclaimed.saturating_sub(added);
         let summary = format!(
-            "{ok_count} ok, {fail_count} failed, {} freed",
-            format_size(freed, BINARY)
+            "{ok_count} ok, {fail_count} failed, {}",
+            freed_summary(reclaimed, added)
         );
 
         let bar = Arc::try_unwrap(bar).unwrap_or_else(|_| panic!("bar arc leaked"));
@@ -267,7 +269,7 @@ pub async fn run(
         ui::print_tree(&format!("git-maintenance: {summary}"), &items);
 
         Ok(CommandSummary {
-            bytes_freed: freed,
+            bytes_freed: net,
             items_ok: ok_count as u64,
             items_failed: fail_count as u64,
             items_skipped: 0,
@@ -283,12 +285,21 @@ fn repo_label(repo: &std::path::Path) -> String {
         .unwrap_or_else(|| repo.display().to_string())
 }
 
+/// Running byte totals across all successfully-maintained repos: gross bytes
+/// reclaimed (repos that shrank) and gross bytes added back (repos that grew).
+/// The net freed figure is `reclaimed - added`, saturating at zero.
+#[derive(Default)]
+struct Totals {
+    reclaimed: std::sync::atomic::AtomicU64,
+    added: std::sync::atomic::AtomicU64,
+}
+
 async fn maintain_one(
     repo: PathBuf,
     max_label: usize,
     bar: &CommandBar,
     items: &Mutex<Vec<TreeItem>>,
-    total_freed: &std::sync::atomic::AtomicU64,
+    totals: &Totals,
     fsck: bool,
     skip: &HashSet<String>,
 ) {
@@ -344,14 +355,20 @@ async fn maintain_one(
         (false, detail)
     } else {
         if size_after < size_before {
-            total_freed.fetch_add(
+            totals.reclaimed.fetch_add(
                 size_before - size_after,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+        } else if size_after > size_before {
+            totals.added.fetch_add(
+                size_after - size_before,
                 std::sync::atomic::Ordering::Relaxed,
             );
         }
         let (verb, size_str) = delta_components(size_before, size_after);
-        let bar_freed = total_freed.load(std::sync::atomic::Ordering::Relaxed);
-        bar.set_message(format!("{} freed", format_size(bar_freed, BINARY)));
+        let reclaimed = totals.reclaimed.load(std::sync::atomic::Ordering::Relaxed);
+        let added = totals.added.load(std::sync::atomic::Ordering::Relaxed);
+        bar.set_message(net_phrase(reclaimed, added));
         let mut notes = String::new();
         let skipped = ordered_skipped(skip);
         if !skipped.is_empty() {
@@ -407,8 +424,6 @@ async fn run_fsck(repo: &std::path::Path) -> String {
 }
 
 /// Short net phrase for the live bar and the lead of the summary.
-// Used by tests now; wired into run()/maintain_one() in the green half of this TDD pair.
-#[allow(dead_code)]
 fn net_phrase(reclaimed: u64, added: u64) -> String {
     if added > reclaimed {
         format!("grew by {}", format_size(added - reclaimed, BINARY))
@@ -419,8 +434,6 @@ fn net_phrase(reclaimed: u64, added: u64) -> String {
 
 /// Full summary fragment: net phrase plus a reclaimed/added breakdown when
 /// any repo grew during maintenance.
-// Used by tests now; wired into run() in the green half of this TDD pair.
-#[allow(dead_code)]
 fn freed_summary(reclaimed: u64, added: u64) -> String {
     let net = net_phrase(reclaimed, added);
     if added == 0 {
