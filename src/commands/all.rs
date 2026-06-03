@@ -79,24 +79,35 @@ fn validate_steps(names: &[String]) -> Result<()> {
     Ok(())
 }
 
+/// Resolve the final, ordered step list by applying `--skip` then `--only` to the
+/// configured steps. `--skip` removes named steps; `--only`, when non-empty,
+/// retains only named steps. Applying both leaves `--only` minus `--skip`. Unknown
+/// names in either list produce an error via `validate_steps`. Step order from the
+/// configured list is preserved.
+fn resolve_steps(mut steps: Vec<String>, skip: &[String], only: &[String]) -> Result<Vec<String>> {
+    if !skip.is_empty() {
+        validate_steps(skip)?;
+        let skip: HashSet<&str> = skip.iter().map(String::as_str).collect();
+        steps.retain(|s| !skip.contains(s.as_str()));
+    }
+
+    if !only.is_empty() {
+        validate_steps(only)?;
+        let only: HashSet<&str> = only.iter().map(String::as_str).collect();
+        steps.retain(|s| only.contains(s.as_str()));
+    }
+
+    Ok(steps)
+}
+
 pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
-    let mut steps: Vec<String> = config
+    let configured: Vec<String> = config
         .all
         .steps
         .clone()
         .unwrap_or_else(|| DEFAULT_STEPS.iter().map(|s| s.to_string()).collect());
 
-    if !args.skip.is_empty() {
-        validate_steps(&args.skip)?;
-        let skip: HashSet<&str> = args.skip.iter().map(String::as_str).collect();
-        steps.retain(|s| !skip.contains(s.as_str()));
-    }
-
-    if !args.only.is_empty() {
-        validate_steps(&args.only)?;
-        let only: HashSet<&str> = args.only.iter().map(String::as_str).collect();
-        steps.retain(|s| only.contains(s.as_str()));
-    }
+    let steps = resolve_steps(configured, &args.skip, &args.only)?;
 
     async move {
         if steps.is_empty() {
@@ -449,6 +460,48 @@ mod tests {
             step_counts(&CommandSummary::skipped_one()),
             "(0 ok, 0 failed, 1 skipped)"
         );
+    }
+
+    fn steps_vec(names: &[&str]) -> Vec<String> {
+        names.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn resolve_steps_only_retains_named_steps_in_order() {
+        let configured = steps_vec(&["clean-node", "clean-chrome", "clean-steam", "clean-tmp"]);
+        let only = steps_vec(&["clean-tmp", "clean-node"]);
+
+        let resolved = resolve_steps(configured, &[], &only).unwrap();
+
+        // Only the named steps survive, and the configured order is preserved
+        // (not the order the `--only` flags were given in).
+        assert_eq!(resolved, steps_vec(&["clean-node", "clean-tmp"]));
+    }
+
+    #[test]
+    fn resolve_steps_unknown_only_name_errors() {
+        let configured = steps_vec(&["clean-node"]);
+        let only = steps_vec(&["not-a-real-step"]);
+
+        let err = resolve_steps(configured, &[], &only).unwrap_err();
+
+        assert!(
+            err.to_string().contains("not-a-real-step"),
+            "error should name the unknown step",
+        );
+    }
+
+    #[test]
+    fn resolve_steps_only_minus_skip() {
+        let configured = steps_vec(&["clean-node", "clean-chrome", "clean-steam"]);
+        let only = steps_vec(&["clean-node", "clean-chrome"]);
+        let skip = steps_vec(&["clean-chrome"]);
+
+        let resolved = resolve_steps(configured, &skip, &only).unwrap();
+
+        // `--only` selects {clean-node, clean-chrome}; `--skip` removes clean-chrome,
+        // leaving only clean-node.
+        assert_eq!(resolved, steps_vec(&["clean-node"]));
     }
 
     #[tokio::test]
