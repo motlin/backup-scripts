@@ -99,204 +99,214 @@ pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
     }
 
     async move {
-        let started = Instant::now();
-        let mut results: Vec<StepResult> = Vec::with_capacity(steps.len());
-
-        for step in &steps {
-            let summary = match step.as_str() {
-                "git-maintenance" => {
-                    git_maintenance::run(
-                        git_maintenance::Args::default(),
-                        &config.git_maintenance,
-                        &config.roots,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-maven" => {
-                    clean_maven::run(
-                        clean_maven::Args::default(),
-                        &config.clean_maven,
-                        &config.roots,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-node" => {
-                    clean_node::run(
-                        clean_node::Args::default(),
-                        &config.clean_node,
-                        &config.roots,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-cargo" => {
-                    clean_cargo::run(
-                        clean_cargo::Args::default(),
-                        &config.clean_cargo,
-                        &config.roots,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-m2" => {
-                    clean_m2::run(clean_m2::Args::default(), &config.clean_m2, dry_run).await?
-                }
-                "clean-gradle" => {
-                    clean_gradle::run(clean_gradle::Args::default(), &config.clean_gradle, dry_run)
-                        .await?
-                }
-                "clean-tmp" => {
-                    clean_tmp::run(clean_tmp::Args::default(), &config.clean_tmp, dry_run).await?
-                }
-                "clean-xcode" => {
-                    clean_xcode::run(clean_xcode::Args::default(), &config.clean_xcode, dry_run)
-                        .await?
-                }
-                "clean-docker" => {
-                    clean_docker::run(clean_docker::Args::default(), &config.clean_docker, dry_run)
-                        .await?
-                }
-                "clean-brew" => {
-                    clean_brew::run(clean_brew::Args::default(), &config.clean_brew, dry_run)
-                        .await?
-                }
-                "clean-npm" => {
-                    clean_npm::run(clean_npm::Args::default(), &config.clean_npm, dry_run).await?
-                }
-                "clean-trash" => {
-                    clean_trash::run(clean_trash::Args::default(), &config.clean_trash, dry_run)
-                        .await?
-                }
-                "clean-yarn" => {
-                    clean_yarn::run(clean_yarn::Args::default(), &config.clean_yarn, dry_run)
-                        .await?
-                }
-                "clean-pnpm" => {
-                    clean_pnpm::run(clean_pnpm::Args::default(), &config.clean_pnpm, dry_run)
-                        .await?
-                }
-                "clean-pip" => {
-                    clean_pip::run(clean_pip::Args::default(), &config.clean_pip, dry_run).await?
-                }
-                "clean-cocoapods" => {
-                    clean_cocoapods::run(
-                        clean_cocoapods::Args::default(),
-                        &config.clean_cocoapods,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-go-build" => {
-                    clean_go_build::run(
-                        clean_go_build::Args::default(),
-                        &config.clean_go_build,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-jetbrains" => {
-                    clean_jetbrains::run(
-                        clean_jetbrains::Args::default(),
-                        &config.clean_jetbrains,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-logs" => {
-                    clean_logs::run(clean_logs::Args::default(), &config.clean_logs, dry_run)
-                        .await?
-                }
-                "clean-library-caches" => {
-                    clean_library_caches::run(
-                        clean_library_caches::Args::default(),
-                        &config.clean_library_caches,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-electron-caches" => {
-                    clean_electron_caches::run(
-                        clean_electron_caches::Args::default(),
-                        &config.clean_electron_caches,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-chrome" => {
-                    clean_chrome::run(clean_chrome::Args::default(), &config.clean_chrome, dry_run)
-                        .await?
-                }
-                "clean-steam" => {
-                    clean_steam::run(clean_steam::Args::default(), &config.clean_steam, dry_run)
-                        .await?
-                }
-                "clean-playwright" => {
-                    clean_playwright::run(
-                        clean_playwright::Args::default(),
-                        &config.clean_playwright,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-cypress" => {
-                    clean_cypress::run(
-                        clean_cypress::Args::default(),
-                        &config.clean_cypress,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-node-gyp" => {
-                    clean_node_gyp::run(
-                        clean_node_gyp::Args::default(),
-                        &config.clean_node_gyp,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-mise" => {
-                    clean_mise::run(clean_mise::Args::default(), &config.clean_mise, dry_run)
-                        .await?
-                }
-                "clean-xdg-cache" => {
-                    clean_xdg_cache::run(
-                        clean_xdg_cache::Args::default(),
-                        &config.clean_xdg_cache,
-                        dry_run,
-                    )
-                    .await?
-                }
-                "clean-rustup" => {
-                    clean_rustup::run(clean_rustup::Args::default(), &config.clean_rustup, dry_run)
-                        .await?
-                }
-                "bz-cleanup" => {
-                    bz_cleanup::run(bz_cleanup::Args::default(), &config.bz_cleanup, dry_run)
-                        .await?
-                }
-                unknown => {
-                    bail!("unknown step in `all.steps`: {unknown}");
-                }
-            };
-
-            results.push(StepResult {
-                name: step.clone(),
-                summary,
-            });
-        }
-
         if steps.is_empty() {
             warn!("`all.steps` is empty — nothing to do");
             return Ok(());
         }
 
+        let started = Instant::now();
+        let (results, outcome) = run_steps(&steps, config, dry_run).await;
+
+        // Always print the aggregate summary of completed steps, even when a
+        // step failed mid-run, before propagating that failure.
         print_aggregate_summary(&results, started.elapsed());
-        Ok(())
+
+        outcome
     }
     .instrument(info_span!("all"))
     .await
+}
+
+/// Run each step in order, collecting a `StepResult` per completed step. On the
+/// first step that returns `Err`, stop and return the results gathered so far
+/// alongside the error so the caller can still print a partial summary.
+async fn run_steps(
+    steps: &[String],
+    config: &AppConfig,
+    dry_run: bool,
+) -> (Vec<StepResult>, Result<()>) {
+    let mut results: Vec<StepResult> = Vec::with_capacity(steps.len());
+
+    for step in steps {
+        match run_step(step, config, dry_run).await {
+            Ok(summary) => results.push(StepResult {
+                name: step.clone(),
+                summary,
+            }),
+            Err(e) => return (results, Err(e)),
+        }
+    }
+
+    (results, Ok(()))
+}
+
+/// Dispatch a single step by name to its cleaner, returning that cleaner's
+/// `CommandSummary`.
+async fn run_step(step: &str, config: &AppConfig, dry_run: bool) -> Result<CommandSummary> {
+    let summary = match step {
+        "git-maintenance" => {
+            git_maintenance::run(
+                git_maintenance::Args::default(),
+                &config.git_maintenance,
+                &config.roots,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-maven" => {
+            clean_maven::run(
+                clean_maven::Args::default(),
+                &config.clean_maven,
+                &config.roots,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-node" => {
+            clean_node::run(
+                clean_node::Args::default(),
+                &config.clean_node,
+                &config.roots,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-cargo" => {
+            clean_cargo::run(
+                clean_cargo::Args::default(),
+                &config.clean_cargo,
+                &config.roots,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-m2" => clean_m2::run(clean_m2::Args::default(), &config.clean_m2, dry_run).await?,
+        "clean-gradle" => {
+            clean_gradle::run(clean_gradle::Args::default(), &config.clean_gradle, dry_run).await?
+        }
+        "clean-tmp" => {
+            clean_tmp::run(clean_tmp::Args::default(), &config.clean_tmp, dry_run).await?
+        }
+        "clean-xcode" => {
+            clean_xcode::run(clean_xcode::Args::default(), &config.clean_xcode, dry_run).await?
+        }
+        "clean-docker" => {
+            clean_docker::run(clean_docker::Args::default(), &config.clean_docker, dry_run).await?
+        }
+        "clean-brew" => {
+            clean_brew::run(clean_brew::Args::default(), &config.clean_brew, dry_run).await?
+        }
+        "clean-npm" => {
+            clean_npm::run(clean_npm::Args::default(), &config.clean_npm, dry_run).await?
+        }
+        "clean-trash" => {
+            clean_trash::run(clean_trash::Args::default(), &config.clean_trash, dry_run).await?
+        }
+        "clean-yarn" => {
+            clean_yarn::run(clean_yarn::Args::default(), &config.clean_yarn, dry_run).await?
+        }
+        "clean-pnpm" => {
+            clean_pnpm::run(clean_pnpm::Args::default(), &config.clean_pnpm, dry_run).await?
+        }
+        "clean-pip" => {
+            clean_pip::run(clean_pip::Args::default(), &config.clean_pip, dry_run).await?
+        }
+        "clean-cocoapods" => {
+            clean_cocoapods::run(
+                clean_cocoapods::Args::default(),
+                &config.clean_cocoapods,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-go-build" => {
+            clean_go_build::run(
+                clean_go_build::Args::default(),
+                &config.clean_go_build,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-jetbrains" => {
+            clean_jetbrains::run(
+                clean_jetbrains::Args::default(),
+                &config.clean_jetbrains,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-logs" => {
+            clean_logs::run(clean_logs::Args::default(), &config.clean_logs, dry_run).await?
+        }
+        "clean-library-caches" => {
+            clean_library_caches::run(
+                clean_library_caches::Args::default(),
+                &config.clean_library_caches,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-electron-caches" => {
+            clean_electron_caches::run(
+                clean_electron_caches::Args::default(),
+                &config.clean_electron_caches,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-chrome" => {
+            clean_chrome::run(clean_chrome::Args::default(), &config.clean_chrome, dry_run).await?
+        }
+        "clean-steam" => {
+            clean_steam::run(clean_steam::Args::default(), &config.clean_steam, dry_run).await?
+        }
+        "clean-playwright" => {
+            clean_playwright::run(
+                clean_playwright::Args::default(),
+                &config.clean_playwright,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-cypress" => {
+            clean_cypress::run(
+                clean_cypress::Args::default(),
+                &config.clean_cypress,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-node-gyp" => {
+            clean_node_gyp::run(
+                clean_node_gyp::Args::default(),
+                &config.clean_node_gyp,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-mise" => {
+            clean_mise::run(clean_mise::Args::default(), &config.clean_mise, dry_run).await?
+        }
+        "clean-xdg-cache" => {
+            clean_xdg_cache::run(
+                clean_xdg_cache::Args::default(),
+                &config.clean_xdg_cache,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-rustup" => {
+            clean_rustup::run(clean_rustup::Args::default(), &config.clean_rustup, dry_run).await?
+        }
+        "bz-cleanup" => {
+            bz_cleanup::run(bz_cleanup::Args::default(), &config.bz_cleanup, dry_run).await?
+        }
+        unknown => {
+            bail!("unknown step in `all.steps`: {unknown}");
+        }
+    };
+
+    Ok(summary)
 }
 
 /// Status tag for a single step: `FAIL` if anything failed, `skip` if the step
@@ -413,6 +423,25 @@ mod tests {
         assert_eq!(
             step_counts(&CommandSummary::skipped_one()),
             "(0 ok, 0 failed, 1 skipped)"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_steps_returns_partial_results_with_error_on_failure() {
+        // An unknown step name makes `run_step` bail. `run_steps` must return the
+        // results gathered before the failure (here, none) alongside the error,
+        // rather than discarding them — so the caller can still print a partial
+        // summary.
+        let config = AppConfig::default();
+        let steps = vec!["not-a-real-step".to_string()];
+
+        let (results, outcome) = run_steps(&steps, &config, true).await;
+
+        assert!(results.is_empty());
+        assert!(outcome.is_err());
+        assert!(
+            outcome.unwrap_err().to_string().contains("not-a-real-step"),
+            "error should name the offending step",
         );
     }
 
