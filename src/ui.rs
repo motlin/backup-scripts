@@ -262,6 +262,36 @@ fn colorize_size(plain: &str, enabled: bool) -> String {
     format!("{color}{plain}{RESET}")
 }
 
+/// Color each whitespace-separated segment of a `format_duration` string (e.g.
+/// `42ms`, `9.6s`, `2m 15s`, `1h 5m`) by the magnitude of its trailing unit:
+/// `ms` dim, `s` green, `m` yellow, `h` red (checking `ms` before `s`). Returns
+/// `plain` unchanged when `!enabled`; a segment with an unrecognized unit is
+/// emitted without color.
+#[allow(dead_code)]
+fn colorize_duration(plain: &str, enabled: bool) -> String {
+    if !enabled {
+        return plain.to_string();
+    }
+    plain
+        .split_whitespace()
+        .map(|token| {
+            let color = if token.ends_with("ms") {
+                DIM
+            } else if token.ends_with('s') {
+                GREEN
+            } else if token.ends_with('m') {
+                YELLOW
+            } else if token.ends_with('h') {
+                RED
+            } else {
+                return token.to_string();
+            };
+            format!("{color}{token}{RESET}")
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 pub fn pad_right(s: &str, width: usize) -> String {
     let len = s.chars().count();
     if len >= width {
@@ -401,6 +431,41 @@ mod tests {
     fn colorize_size_unknown_unit_returns_plain() {
         assert_eq!(colorize_size("7 widgets", true), "7 widgets");
         assert_eq!(colorize_size("nonsense", true), "nonsense");
+    }
+
+    #[test]
+    fn colorize_duration_disabled_returns_plain() {
+        assert_eq!(colorize_duration("2m 15s", false), "2m 15s");
+        assert_eq!(colorize_duration("42ms", false), "42ms");
+    }
+
+    #[test]
+    fn colorize_duration_millis_dim() {
+        assert_eq!(colorize_duration("42ms", true), format!("{DIM}42ms{RESET}"));
+    }
+
+    #[test]
+    fn colorize_duration_seconds_green() {
+        assert_eq!(
+            colorize_duration("9.6s", true),
+            format!("{GREEN}9.6s{RESET}")
+        );
+    }
+
+    #[test]
+    fn colorize_duration_minutes_and_seconds() {
+        assert_eq!(
+            colorize_duration("2m 15s", true),
+            format!("{YELLOW}2m{RESET} {GREEN}15s{RESET}")
+        );
+    }
+
+    #[test]
+    fn colorize_duration_hours_and_minutes() {
+        assert_eq!(
+            colorize_duration("1h 5m", true),
+            format!("{RED}1h{RESET} {YELLOW}5m{RESET}")
+        );
     }
 
     #[test]
