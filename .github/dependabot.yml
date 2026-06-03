@@ -1,0 +1,44 @@
+version: 2
+updates:
+    - package-ecosystem: 'cargo'
+      directory: '/'
+      schedule:
+          interval: 'daily'
+          time: '07:00'
+          timezone: 'America/New_York'
+      open-pull-requests-limit: 25
+      labels:
+          - 'dependencies'
+      groups:
+          tokio-ecosystem:
+              patterns:
+                  - 'tokio'
+                  - 'tokio-*'
+          tracing-ecosystem:
+              patterns:
+                  - 'tracing'
+                  - 'tracing-*'
+          serde-ecosystem:
+              patterns:
+                  - 'serde'
+                  - 'serde_*'
+          clap-ecosystem:
+              patterns:
+                  - 'clap'
+                  - 'clap_*'
+      commit-message:
+          prefix: 'dependabot'
+          include: 'scope'
+
+    - package-ecosystem: 'github-actions'
+      directory: '/'
+      schedule:
+          interval: 'daily'
+          time: '07:00'
+          timezone: 'America/New_York'
+      open-pull-requests-limit: 25
+      labels:
+          - 'dependencies'
+      commit-message:
+          prefix: 'dependabot'
+          include: 'scope'
