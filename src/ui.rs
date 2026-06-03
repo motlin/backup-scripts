@@ -131,7 +131,7 @@ pub fn print_tree(header: &str, items: &[TreeItem]) {
         let icon = if item.ok { "✓" } else { "✗" };
         let label = pad_right(&item.label, max_label);
         let detail = format_detail(&item.detail);
-        emit_line(&format!("  {branch} {icon} {label}  {detail}"));
+        emit_line(&format!("{branch} {icon} {label}  {detail}"));
     }
 }
 
