@@ -231,7 +231,8 @@ fn format_detail_colored(d: &ItemDetail, color: bool) -> String {
 /// Rules:
 /// - `<100ms` → `Xms` (e.g. `42ms`)
 /// - `100ms-60s` → `X.Xs` (e.g. `9.6s`)
-/// - `>=60s` → `XmYs` (e.g. `2m 15s`)
+/// - `60s-60m` → `XmYs` (e.g. `2m 15s`)
+/// - `>=60m` → `XhYm` (e.g. `1h 5m`)
 pub fn format_duration(ms: u64) -> String {
     if ms < 100 {
         format!("{ms}ms")
@@ -240,9 +241,14 @@ pub fn format_duration(ms: u64) -> String {
         format!("{secs:.1}s")
     } else {
         let total_secs = ms / 1000;
-        let minutes = total_secs / 60;
+        let hours = total_secs / 3600;
+        let minutes = (total_secs % 3600) / 60;
         let seconds = total_secs % 60;
-        format!("{minutes}m {seconds}s")
+        if hours > 0 {
+            format!("{hours}h {minutes}m")
+        } else {
+            format!("{minutes}m {seconds}s")
+        }
     }
 }
 
@@ -394,7 +400,14 @@ mod tests {
     fn format_duration_minutes() {
         assert_eq!(format_duration(60_000), "1m 0s");
         assert_eq!(format_duration(135_000), "2m 15s");
-        assert_eq!(format_duration(3_600_000), "60m 0s");
+        assert_eq!(format_duration(3_599_000), "59m 59s");
+    }
+
+    #[test]
+    fn format_duration_hours() {
+        assert_eq!(format_duration(3_600_000), "1h 0m");
+        assert_eq!(format_duration(3_900_000), "1h 5m");
+        assert_eq!(format_duration(86_340_000), "23h 59m");
     }
 
     #[test]
