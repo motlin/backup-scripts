@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::Args as ClapArgs;
 use humansize::{BINARY, format_size};
 use std::path::{Path, PathBuf};
@@ -90,12 +90,17 @@ pub async fn run(args: Args, cfg: &CleanChromeConfig, dry_run: bool) -> Result<C
             return Ok::<_, anyhow::Error>(None);
         }
 
+        // Chrome holds locks on these caches while open; deleting under it can
+        // corrupt the running browser. Unlike a hard error, we skip the step so an
+        // open Chrome doesn't fail an otherwise-clean `all` run.
         if !skip_running_check
             && let Some(pid) = chrome_running_pid().await
         {
-            bail!(
-                "Chrome appears to be running (PID {pid}); quit it before running clean-chrome (or pass --skip-running-check / --dry-run)"
+            warn!(
+                pid,
+                "Chrome appears to be running; skipping clean-chrome (quit Chrome and re-run `backup clean-chrome`, or pass --skip-running-check / --dry-run)"
             );
+            return Ok(None);
         }
 
         let targets = collect_targets(&chrome_dir, &model_dirs, &profile_subdirs);
@@ -173,7 +178,7 @@ pub async fn run(args: Args, cfg: &CleanChromeConfig, dry_run: bool) -> Result<C
             items_skipped: 0,
         })
     } else {
-        Ok(CommandSummary::default())
+        Ok(CommandSummary::skipped_one())
     }
 }
 
