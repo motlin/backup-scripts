@@ -1,46 +1,31 @@
+set dotenv-filename := ".envrc"
+
+import ".just/console.just"
+import ".just/cargo.just"
+import ".just/git.just"
+import ".just/git-test.just"
+
 # `just --list --unsorted`
-[group('default')]
 default:
     @just --list --unsorted
 
-ci := env("CI", "")
+# `mise install`
+mise:
+    mise install --quiet
+    mise current
 
-# Install toolchain via mise
+# Install the toolchain via mise
 [group('setup')]
 install:
     mise install
 
-# cargo build --release
-[group('build')]
-build:
-    cargo build --release
+# clean (git only - cargo artifacts live in target/ and are gitignored)
+@clean: _clean-git
 
-# cargo test --release
-[group('build')]
-test:
-    cargo test --release
-
-# cargo clippy --release --all-targets -- -D warnings
-[group('build')]
-clippy:
-    cargo clippy --release --all-targets -- -D warnings
-
-# cargo fmt (--check in CI, fix locally)
-[group('build')]
-fmt:
-    cargo fmt --all {{ if ci != "" { "-- --check" } else { "" } }}
-
-# build + test + clippy + fmt
-[group('build')]
-check: build test clippy fmt
-
-# cargo run --release -- {{ARGS}}
-[group('run')]
-run *ARGS:
-    cargo run --release -- {{ARGS}}
-
-# Run all pre-commit checks
-[group('build')]
+# `just check` then run all pre-commit hooks
 precommit: check
     pre-commit run --all-files
     @echo "All pre-commit checks passed!"
+
+# Override this with a command called `woof` which notifies you in whatever ways you prefer.
+echo_command := env('ECHO_COMMAND', "echo")

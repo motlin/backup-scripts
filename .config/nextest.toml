@@ -1,0 +1,14 @@
+# cargo-nextest configuration: https://nexte.st/docs/configuration/
+
+[profile.default]
+# Print output for failing tests as soon as they fail.
+failure-output = "immediate"
+# Show a final summary of slow and failed tests.
+final-status-level = "slow"
+
+[profile.ci]
+# Fail fast disabled so CI reports every failure in a single run.
+fail-fast = false
+failure-output = "immediate-final"
+# Retry flaky tests a couple of times before giving up in CI.
+retries = 2

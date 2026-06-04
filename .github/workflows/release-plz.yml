@@ -1,0 +1,40 @@
+# release-plz opens release PRs and publishes the crate. Configure the secrets
+# below before enabling: CARGO_REGISTRY_TOKEN (crates.io) and, ideally, a
+# RELEASE_PLZ_TOKEN PAT so release PRs trigger CI. release-plz itself is pinned
+# in .mise/config.toml. See https://release-plz.dev/docs/github
+
+on:
+    push:
+        branches:
+            - main
+
+concurrency:
+    group: release-plz-${{ github.ref }}
+    cancel-in-progress: false
+
+jobs:
+    release-plz:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            pull-requests: write
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  fetch-depth: 0
+                  token: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+
+            - uses: jdx/mise-action@v4
+              with:
+                  cache: true
+
+            - name: Run release-plz release-pr
+              run: release-plz release-pr --git-token "${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}"
+              env:
+                  GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+
+            - name: Run release-plz release
+              run: release-plz release --git-token "${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}"
+              env:
+                  GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN || secrets.GITHUB_TOKEN }}
+                  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

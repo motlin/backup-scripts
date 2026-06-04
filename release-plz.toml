@@ -1,0 +1,9 @@
+# release-plz configuration: https://release-plz.dev/docs/config
+# release-plz opens release PRs and publishes crates from the release workflow.
+
+[workspace]
+# Update the changelog with every release.
+changelog_update = true
+# Run `cargo semver-checks` is not configured by default; enable per project.
+git_release_enable = true
+git_tag_enable = true

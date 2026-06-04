@@ -1,6 +1,10 @@
 [tools]
 just = "1.51.0"
-rust = "stable"
+rust = { version = "stable", components = "clippy,rustfmt,llvm-tools-preview" }
 pre-commit = "latest"
 node = "26.2.0"
 "npm:markdownlint-cli2" = "latest"
+"aqua:nextest-rs/nextest/cargo-nextest" = "latest"
+"aqua:EmbarkStudios/cargo-deny" = "latest"
+"aqua:taiki-e/cargo-llvm-cov" = "latest"
+release-plz = "latest"

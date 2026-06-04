@@ -1,0 +1,33 @@
+# cargo-deny configuration: https://embarkstudios.github.io/cargo-deny/
+# Run with `just deny` or `cargo deny check`.
+
+[advisories]
+# Deny crates with security advisories or that have been yanked.
+yanked = "deny"
+
+[licenses]
+# Allow only licenses that are compatible with Apache-2.0 distribution.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+]
+confidence-threshold = 0.8
+# This crate is an internal, unpublished CLI (publish = false) with no license
+# field, so skip the license requirement for private workspace members.
+private = { ignore = true }
+
+[bans]
+# Warn about duplicate transitive dependencies and wildcard version requirements.
+multiple-versions = "warn"
+wildcards = "warn"
+
+[sources]
+# Only allow dependencies from crates.io by default.
+unknown-registry = "deny"
+unknown-git = "deny"
