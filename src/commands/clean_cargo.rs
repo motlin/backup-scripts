@@ -44,16 +44,16 @@ pub async fn run(
         .unwrap_or(DEFAULT_CONCURRENCY);
     let roots = resolve_roots(args.roots, &cfg.roots, global_roots, "clean_cargo")?;
 
-    cleaner::clean(
-        "clean-cargo",
-        "Cargo.toml",
-        "target",
+    cleaner::clean(cleaner::Config {
+        bar_label: "clean-cargo",
+        marker: "Cargo.toml",
+        junk: "target",
         roots,
         depth,
         days,
         concurrency,
         dry_run,
-    )
+    })
     .instrument(info_span!("clean-cargo"))
     .await
 }

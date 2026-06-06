@@ -1,18 +1,12 @@
 use anyhow::Result;
 use clap::Args as ClapArgs;
-use humansize::{BINARY, format_size};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
-use tokio::sync::Semaphore;
-use tokio::task::JoinSet;
+use std::sync::Arc;
 use tracing::{Instrument, info, info_span, warn};
 
 use super::CommandSummary;
+use super::executor::{delete_children, relative_label, run_parallel};
 use crate::config::{CleanSteamConfig, expand_tilde};
-use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration};
-use crate::walk::{dir_size, older_than_days};
 
 pub const DEFAULT_DAYS: u32 = 0;
 pub const DEFAULT_CONCURRENCY: usize = 4;
@@ -69,10 +63,10 @@ pub async fn run(args: Args, cfg: &CleanSteamConfig, dry_run: bool) -> Result<Co
         .clone()
         .unwrap_or_else(|| DEFAULT_CACHE_DIRS.iter().map(|s| s.to_string()).collect());
 
-    let result = async move {
+    async move {
         if !steam_dir.is_dir() {
             warn!(path = %steam_dir.display(), "Steam dir not found, skipping");
-            return Ok::<_, anyhow::Error>(None);
+            return Ok::<_, anyhow::Error>(CommandSummary::default());
         }
 
         // Steam holds file locks on these caches while open; deleting under it can
@@ -85,82 +79,30 @@ pub async fn run(args: Args, cfg: &CleanSteamConfig, dry_run: bool) -> Result<Co
                 pid,
                 "Steam appears to be running; skipping clean-steam (quit Steam, or pass --skip-running-check / --dry-run)"
             );
-            return Ok(None);
+            return Ok(CommandSummary::skipped_one());
         }
 
         let targets = collect_targets(&steam_dir, &cache_dirs);
         info!(found = targets.len(), "existing Steam cache dirs");
 
-        if targets.is_empty() {
-            return Ok(None);
-        }
-
-        let total_bytes = Arc::new(AtomicU64::new(0));
-        let total_count = Arc::new(AtomicU64::new(0));
-        let items: Arc<Mutex<Vec<TreeItem>>> = Arc::new(Mutex::new(Vec::new()));
-        let bar = Arc::new(CommandBar::new("clean-steam", targets.len() as u64));
-
         let steam_for_labels = Arc::new(steam_dir.clone());
-        let sem = Arc::new(Semaphore::new(concurrency.max(1)));
-        let mut set: JoinSet<()> = JoinSet::new();
-        for dir in targets {
-            let sem = Arc::clone(&sem);
-            let total_bytes = Arc::clone(&total_bytes);
-            let total_count = Arc::clone(&total_count);
-            let bar = Arc::clone(&bar);
-            let items = Arc::clone(&items);
-            let steam_for_labels = Arc::clone(&steam_for_labels);
-            set.spawn(
+        Ok(run_parallel(
+            "clean-steam",
+            targets,
+            concurrency,
+            dry_run,
+            move |dir, progress| {
+                let steam_for_labels = Arc::clone(&steam_for_labels);
                 async move {
-                    let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                    clean_one(
-                        dir,
-                        days,
-                        dry_run,
-                        &total_bytes,
-                        &total_count,
-                        &bar,
-                        &items,
-                        &steam_for_labels,
-                    )
-                    .await;
+                    let label = relative_label(&dir, &steam_for_labels);
+                    delete_children(&dir, days, label, &progress).await;
                 }
-                .in_current_span(),
-            );
-        }
-        while set.join_next().await.is_some() {}
-
-        let count = total_count.load(Ordering::Relaxed);
-        let bytes = total_bytes.load(Ordering::Relaxed);
-        let verb = if dry_run { "would free" } else { "freed" };
-        let summary = format!("{verb} {} across {count} items", format_size(bytes, BINARY));
-
-        let bar = Arc::try_unwrap(bar).unwrap_or_else(|_| panic!("bar arc leaked"));
-        bar.finish_ok(summary.clone());
-
-        let items = Arc::try_unwrap(items)
-            .unwrap_or_else(|_| panic!("items arc leaked"))
-            .into_inner()
-            .unwrap_or_default();
-
-        Ok(Some((summary, items, bytes)))
+            },
+        )
+        .await)
     }
     .instrument(info_span!("clean-steam", days))
-    .await?;
-
-    if let Some((summary, items, bytes)) = result {
-        let items_ok = items.iter().filter(|i| i.ok).count() as u64;
-        let items_failed = items.len() as u64 - items_ok;
-        ui::print_tree(&format!("clean-steam: {summary}"), &items);
-        Ok(CommandSummary {
-            bytes_freed: bytes,
-            items_ok,
-            items_failed,
-            items_skipped: 0,
-        })
-    } else {
-        Ok(CommandSummary::skipped_one())
-    }
+    .await
 }
 
 /// Returns the PID of any running Steam process, or None if none are found.
@@ -188,111 +130,6 @@ fn collect_targets(steam_dir: &Path, cache_dirs: &[String]) -> Vec<PathBuf> {
         }
     }
     out
-}
-
-/// Path relative to the Steam root (e.g. `steamapps/shadercache`), so the
-/// two `steamapps/*` targets stay distinguishable from `appcache`.
-fn target_label(path: &Path, steam_dir: &Path) -> String {
-    path.strip_prefix(steam_dir)
-        .unwrap_or(path)
-        .display()
-        .to_string()
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn clean_one(
-    dir: PathBuf,
-    days: u32,
-    dry_run: bool,
-    total_bytes: &AtomicU64,
-    total_count: &AtomicU64,
-    bar: &CommandBar,
-    items: &Mutex<Vec<TreeItem>>,
-    steam_dir: &Path,
-) {
-    let label = target_label(&dir, steam_dir);
-
-    let started = Instant::now();
-    let children = match read_children(&dir) {
-        Ok(c) => c,
-        Err(e) => {
-            let detail = ItemDetail::failure(format!("{e}"));
-            warn!("✗ {label}  {}", ui::format_detail(&detail));
-            items.lock().unwrap().push(TreeItem {
-                label,
-                detail,
-                ok: false,
-            });
-            bar.inc(1);
-            return;
-        }
-    };
-
-    let mut freed: u64 = 0;
-    let mut all_ok = true;
-    let mut last_err: Option<String> = None;
-    for child in &children {
-        if !older_than_days(child, days) {
-            continue;
-        }
-        let size = dir_size(child).await.unwrap_or(0);
-        if dry_run {
-            freed += size;
-            continue;
-        }
-        let res = if child.is_dir() && !child.is_symlink() {
-            tokio::fs::remove_dir_all(child).await
-        } else {
-            tokio::fs::remove_file(child).await
-        };
-        match res {
-            Ok(()) => freed += size,
-            Err(e) => {
-                all_ok = false;
-                last_err = Some(format!("{e}"));
-            }
-        }
-    }
-
-    total_bytes.fetch_add(freed, Ordering::Relaxed);
-    total_count.fetch_add(1, Ordering::Relaxed);
-
-    let detail = if !all_ok {
-        let suffix = last_err.unwrap_or_else(|| "unknown error".to_string());
-        ItemDetail::failure(suffix)
-    } else if dry_run {
-        ItemDetail::dry_run("would delete", format_size(freed, BINARY))
-    } else {
-        ItemDetail::success(
-            "deleted",
-            format_size(freed, BINARY),
-            format_duration(started.elapsed().as_millis() as u64),
-        )
-    };
-
-    if !all_ok {
-        warn!("✗ {label}  {}", ui::format_detail(&detail));
-    }
-
-    bar.inc(1);
-    let running_bytes = total_bytes.load(Ordering::Relaxed);
-    let verb = if dry_run { "would free" } else { "freed" };
-    bar.set_message(format!("{verb} {}", format_size(running_bytes, BINARY)));
-
-    items.lock().unwrap().push(TreeItem {
-        label,
-        detail,
-        ok: all_ok,
-    });
-}
-
-fn read_children(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
-    let mut out = Vec::new();
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        out.push(entry.path());
-    }
-    Ok(out)
 }
 
 #[cfg(test)]
@@ -364,9 +201,9 @@ mod tests {
     fn target_label_is_relative_to_steam_root() {
         let steam = Path::new("/Users/me/Library/Application Support/Steam");
         assert_eq!(
-            target_label(&steam.join("steamapps/shadercache"), steam),
+            relative_label(&steam.join("steamapps/shadercache"), steam),
             "steamapps/shadercache"
         );
-        assert_eq!(target_label(&steam.join("appcache"), steam), "appcache");
+        assert_eq!(relative_label(&steam.join("appcache"), steam), "appcache");
     }
 }

@@ -146,4 +146,5 @@ pub mod clean_xcode;
 pub mod clean_xdg_cache;
 pub mod clean_yarn;
 pub mod cleaner;
+pub mod executor;
 pub mod git_maintenance;

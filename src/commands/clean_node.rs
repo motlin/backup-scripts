@@ -44,16 +44,16 @@ pub async fn run(
         .unwrap_or(DEFAULT_CONCURRENCY);
     let roots = resolve_roots(args.roots, &cfg.roots, global_roots, "clean_node")?;
 
-    cleaner::clean(
-        "clean-node",
-        "package.json",
-        "node_modules",
+    cleaner::clean(cleaner::Config {
+        bar_label: "clean-node",
+        marker: "package.json",
+        junk: "node_modules",
         roots,
         depth,
         days,
         concurrency,
         dry_run,
-    )
+    })
     .instrument(info_span!("clean-node"))
     .await
 }

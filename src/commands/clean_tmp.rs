@@ -2,17 +2,14 @@ use anyhow::Result;
 use clap::Args as ClapArgs;
 use humansize::{BINARY, format_size};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tokio::sync::Semaphore;
-use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
 use walkdir::WalkDir;
 
 use super::CommandSummary;
+use super::executor::{CleanProgress, run_parallel};
 use crate::config::{CleanTmpConfig, expand_tilde};
-use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration};
+use crate::ui::{self, ItemDetail, format_duration};
 use crate::walk::{dir_size, older_than_days};
 
 pub const DEFAULT_DAYS: u32 = 30;
@@ -73,76 +70,24 @@ pub async fn run(args: Args, cfg: &CleanTmpConfig, dry_run: bool) -> Result<Comm
 
         info!(found = candidates.len(), "old files/directories");
 
-        if candidates.is_empty() {
-            return Ok(CommandSummary::default());
-        }
+        let summary = run_parallel(
+            "clean-tmp",
+            candidates,
+            concurrency,
+            dry_run,
+            move |path, progress| async move {
+                clean_one(path, &progress).await;
+            },
+        )
+        .await;
 
-        let total_bytes = Arc::new(AtomicU64::new(0));
-        let total_count = Arc::new(AtomicU64::new(0));
-        let items: Arc<Mutex<Vec<TreeItem>>> = Arc::new(Mutex::new(Vec::new()));
-        let bar = Arc::new(CommandBar::new("clean-tmp", candidates.len() as u64));
-
-        let sem = Arc::new(Semaphore::new(concurrency.max(1)));
-        let mut set: JoinSet<()> = JoinSet::new();
-        for path in candidates {
-            let sem = Arc::clone(&sem);
-            let total_bytes = Arc::clone(&total_bytes);
-            let total_count = Arc::clone(&total_count);
-            let bar = Arc::clone(&bar);
-            let items = Arc::clone(&items);
-            set.spawn(
-                async move {
-                    let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                    clean_one(
-                        path,
-                        dry_run,
-                        &total_bytes,
-                        &total_count,
-                        &bar,
-                        &items,
-                    )
-                    .await;
-                }
-                .in_current_span(),
-            );
-        }
-        while set.join_next().await.is_some() {}
-
-        let count = total_count.load(Ordering::Relaxed);
-        let bytes = total_bytes.load(Ordering::Relaxed);
-        let verb = if dry_run { "would free" } else { "freed" };
-        let summary = format!("{verb} {} across {count} items", format_size(bytes, BINARY));
-
-        let bar = Arc::try_unwrap(bar).unwrap_or_else(|_| panic!("bar arc leaked"));
-        bar.finish_ok(summary.clone());
-
-        let items = Arc::try_unwrap(items)
-            .unwrap_or_else(|_| panic!("items arc leaked"))
-            .into_inner()
-            .unwrap_or_default();
-        let items_ok = items.iter().filter(|i| i.ok).count() as u64;
-        let items_failed = items.len() as u64 - items_ok;
-        ui::print_tree(&format!("clean-tmp: {summary}"), &items);
-
-        Ok(CommandSummary {
-            bytes_freed: bytes,
-            items_ok,
-            items_failed,
-            items_skipped: 0,
-        })
+        Ok(summary)
     }
     .instrument(info_span!("clean-tmp", days,))
     .await
 }
 
-async fn clean_one(
-    path: PathBuf,
-    dry_run: bool,
-    total_bytes: &AtomicU64,
-    total_count: &AtomicU64,
-    bar: &CommandBar,
-    items: &Mutex<Vec<TreeItem>>,
-) {
+async fn clean_one(path: PathBuf, progress: &CleanProgress) {
     let label = path.display().to_string();
 
     let started = Instant::now();
@@ -152,41 +97,31 @@ async fn clean_one(
         std::fs::metadata(&path).ok().map(|m| m.len()).unwrap_or(0)
     };
 
-    let (ok, detail) = if dry_run {
-        total_bytes.fetch_add(size, Ordering::Relaxed);
-        total_count.fetch_add(1, Ordering::Relaxed);
+    if progress.dry_run() {
         let detail = ItemDetail::dry_run("would delete", format_size(size, BINARY));
-        (true, detail)
-    } else {
-        let result = if path.is_dir() {
-            tokio::fs::remove_dir_all(&path).await.map(|_| ())
-        } else {
-            tokio::fs::remove_file(&path).await.map(|_| ())
-        };
+        progress.record(label, detail, true, size);
+        return;
+    }
 
-        match result {
-            Ok(()) => {
-                total_bytes.fetch_add(size, Ordering::Relaxed);
-                total_count.fetch_add(1, Ordering::Relaxed);
-                let detail = ItemDetail::success(
-                    "deleted",
-                    format_size(size, BINARY),
-                    format_duration(started.elapsed().as_millis() as u64),
-                );
-                (true, detail)
-            }
-            Err(e) => {
-                let detail = ItemDetail::failure(format!("{e}"));
-                warn!("✗ {label}  {}", ui::format_detail(&detail));
-                (false, detail)
-            }
-        }
+    let result = if path.is_dir() {
+        tokio::fs::remove_dir_all(&path).await.map(|_| ())
+    } else {
+        tokio::fs::remove_file(&path).await.map(|_| ())
     };
 
-    bar.inc(1);
-    let running_bytes = total_bytes.load(Ordering::Relaxed);
-    let verb = if dry_run { "would free" } else { "freed" };
-    bar.set_message(format!("{verb} {}", format_size(running_bytes, BINARY)));
-
-    items.lock().unwrap().push(TreeItem { label, detail, ok });
+    match result {
+        Ok(()) => {
+            let detail = ItemDetail::success(
+                "deleted",
+                format_size(size, BINARY),
+                format_duration(started.elapsed().as_millis() as u64),
+            );
+            progress.record(label, detail, true, size);
+        }
+        Err(e) => {
+            let detail = ItemDetail::failure(format!("{e}"));
+            warn!("✗ {label}  {}", ui::format_detail(&detail));
+            progress.record(label, detail, false, 0);
+        }
+    }
 }

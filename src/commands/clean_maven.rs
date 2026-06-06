@@ -44,16 +44,16 @@ pub async fn run(
         .unwrap_or(DEFAULT_CONCURRENCY);
     let roots = resolve_roots(args.roots, &cfg.roots, global_roots, "clean_maven")?;
 
-    cleaner::clean(
-        "clean-maven",
-        "pom.xml",
-        "target",
+    cleaner::clean(cleaner::Config {
+        bar_label: "clean-maven",
+        marker: "pom.xml",
+        junk: "target",
         roots,
         depth,
         days,
         concurrency,
         dry_run,
-    )
+    })
     .instrument(info_span!("clean-maven"))
     .await
 }

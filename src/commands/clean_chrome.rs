@@ -1,18 +1,11 @@
 use anyhow::Result;
 use clap::Args as ClapArgs;
-use humansize::{BINARY, format_size};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
-use tokio::sync::Semaphore;
-use tokio::task::JoinSet;
 use tracing::{Instrument, info, info_span, warn};
 
 use super::CommandSummary;
+use super::executor::{delete_children, run_parallel};
 use crate::config::{CleanChromeConfig, expand_tilde};
-use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration};
-use crate::walk::{dir_size, older_than_days};
 
 pub const DEFAULT_DAYS: u32 = 0;
 pub const DEFAULT_CONCURRENCY: usize = 4;
@@ -84,10 +77,10 @@ pub async fn run(args: Args, cfg: &CleanChromeConfig, dry_run: bool) -> Result<C
             .collect()
     });
 
-    let result = async move {
+    async move {
         if !chrome_dir.is_dir() {
             warn!(path = %chrome_dir.display(), "chrome dir not found");
-            return Ok::<_, anyhow::Error>(None);
+            return Ok::<_, anyhow::Error>(CommandSummary::default());
         }
 
         // Chrome holds locks on these caches while open; deleting under it can
@@ -100,79 +93,26 @@ pub async fn run(args: Args, cfg: &CleanChromeConfig, dry_run: bool) -> Result<C
                 pid,
                 "Chrome appears to be running; skipping clean-chrome (quit Chrome and re-run `backup clean-chrome`, or pass --skip-running-check / --dry-run)"
             );
-            return Ok(None);
+            return Ok(CommandSummary::skipped_one());
         }
 
         let targets = collect_targets(&chrome_dir, &model_dirs, &profile_subdirs);
         info!(found = targets.len(), "existing chrome target dirs");
 
-        if targets.is_empty() {
-            return Ok(None);
-        }
-
-        let total_bytes = Arc::new(AtomicU64::new(0));
-        let total_count = Arc::new(AtomicU64::new(0));
-        let items: Arc<Mutex<Vec<TreeItem>>> = Arc::new(Mutex::new(Vec::new()));
-        let bar = Arc::new(CommandBar::new("clean-chrome", targets.len() as u64));
-
-        let sem = Arc::new(Semaphore::new(concurrency.max(1)));
-        let mut set: JoinSet<()> = JoinSet::new();
-        for dir in targets {
-            let sem = Arc::clone(&sem);
-            let total_bytes = Arc::clone(&total_bytes);
-            let total_count = Arc::clone(&total_count);
-            let bar = Arc::clone(&bar);
-            let items = Arc::clone(&items);
-            set.spawn(
-                async move {
-                    let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                    clean_one(
-                        dir,
-                        days,
-                        dry_run,
-                        &total_bytes,
-                        &total_count,
-                        &bar,
-                        &items,
-                    )
-                    .await;
-                }
-                .in_current_span(),
-            );
-        }
-        while set.join_next().await.is_some() {}
-
-        let count = total_count.load(Ordering::Relaxed);
-        let bytes = total_bytes.load(Ordering::Relaxed);
-        let verb = if dry_run { "would free" } else { "freed" };
-        let summary = format!("{verb} {} across {count} items", format_size(bytes, BINARY));
-
-        let bar = Arc::try_unwrap(bar).unwrap_or_else(|_| panic!("bar arc leaked"));
-        bar.finish_ok(summary.clone());
-
-        let items = Arc::try_unwrap(items)
-            .unwrap_or_else(|_| panic!("items arc leaked"))
-            .into_inner()
-            .unwrap_or_default();
-
-        Ok(Some((summary, items, bytes)))
+        Ok(run_parallel(
+            "clean-chrome",
+            targets,
+            concurrency,
+            dry_run,
+            move |dir, progress| async move {
+                let label = path_label(&dir);
+                delete_children(&dir, days, label, &progress).await;
+            },
+        )
+        .await)
     }
     .instrument(info_span!("clean-chrome", days))
-    .await?;
-
-    if let Some((summary, items, bytes)) = result {
-        let items_ok = items.iter().filter(|i| i.ok).count() as u64;
-        let items_failed = items.len() as u64 - items_ok;
-        ui::print_tree(&format!("clean-chrome: {summary}"), &items);
-        Ok(CommandSummary {
-            bytes_freed: bytes,
-            items_ok,
-            items_failed,
-            items_skipped: 0,
-        })
-    } else {
-        Ok(CommandSummary::skipped_one())
-    }
+    .await
 }
 
 /// Returns the PID of any running Chrome process, or None if none are found.
@@ -248,100 +188,6 @@ fn path_label(path: &Path) -> String {
     } else {
         comps.join("/")
     }
-}
-
-async fn clean_one(
-    dir: PathBuf,
-    days: u32,
-    dry_run: bool,
-    total_bytes: &AtomicU64,
-    total_count: &AtomicU64,
-    bar: &CommandBar,
-    items: &Mutex<Vec<TreeItem>>,
-) {
-    let label = path_label(&dir);
-
-    let started = Instant::now();
-    let children = match read_children(&dir) {
-        Ok(c) => c,
-        Err(e) => {
-            let detail = ItemDetail::failure(format!("{e}"));
-            warn!("✗ {label}  {}", ui::format_detail(&detail));
-            items.lock().unwrap().push(TreeItem {
-                label,
-                detail,
-                ok: false,
-            });
-            bar.inc(1);
-            return;
-        }
-    };
-
-    let mut freed: u64 = 0;
-    let mut all_ok = true;
-    let mut last_err: Option<String> = None;
-    for child in &children {
-        if !older_than_days(child, days) {
-            continue;
-        }
-        let size = dir_size(child).await.unwrap_or(0);
-        if dry_run {
-            freed += size;
-            continue;
-        }
-        let res = if child.is_dir() && !child.is_symlink() {
-            tokio::fs::remove_dir_all(child).await
-        } else {
-            tokio::fs::remove_file(child).await
-        };
-        match res {
-            Ok(()) => freed += size,
-            Err(e) => {
-                all_ok = false;
-                last_err = Some(format!("{e}"));
-            }
-        }
-    }
-
-    total_bytes.fetch_add(freed, Ordering::Relaxed);
-    total_count.fetch_add(1, Ordering::Relaxed);
-
-    let detail = if !all_ok {
-        let suffix = last_err.unwrap_or_else(|| "unknown error".to_string());
-        ItemDetail::failure(suffix)
-    } else if dry_run {
-        ItemDetail::dry_run("would delete", format_size(freed, BINARY))
-    } else {
-        ItemDetail::success(
-            "deleted",
-            format_size(freed, BINARY),
-            format_duration(started.elapsed().as_millis() as u64),
-        )
-    };
-
-    if !all_ok {
-        warn!("✗ {label}  {}", ui::format_detail(&detail));
-    }
-
-    bar.inc(1);
-    let running_bytes = total_bytes.load(Ordering::Relaxed);
-    let verb = if dry_run { "would free" } else { "freed" };
-    bar.set_message(format!("{verb} {}", format_size(running_bytes, BINARY)));
-
-    items.lock().unwrap().push(TreeItem {
-        label,
-        detail,
-        ok: all_ok,
-    });
-}
-
-fn read_children(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
-    let mut out = Vec::new();
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        out.push(entry.path());
-    }
-    Ok(out)
 }
 
 #[cfg(test)]
