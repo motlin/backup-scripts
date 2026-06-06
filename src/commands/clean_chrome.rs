@@ -11,7 +11,7 @@ use tracing::{Instrument, info, info_span, warn};
 
 use super::CommandSummary;
 use crate::config::{CleanChromeConfig, expand_tilde};
-use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
+use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration};
 use crate::walk::{dir_size, older_than_days};
 
 pub const DEFAULT_DAYS: u32 = 0;
@@ -115,11 +115,6 @@ pub async fn run(args: Args, cfg: &CleanChromeConfig, dry_run: bool) -> Result<C
         let items: Arc<Mutex<Vec<TreeItem>>> = Arc::new(Mutex::new(Vec::new()));
         let bar = Arc::new(CommandBar::new("clean-chrome", targets.len() as u64));
 
-        let max_label = targets
-            .iter()
-            .map(|p| path_label(p).chars().count())
-            .max()
-            .unwrap_or(0);
         let sem = Arc::new(Semaphore::new(concurrency.max(1)));
         let mut set: JoinSet<()> = JoinSet::new();
         for dir in targets {
@@ -133,7 +128,6 @@ pub async fn run(args: Args, cfg: &CleanChromeConfig, dry_run: bool) -> Result<C
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
                     clean_one(
                         dir,
-                        max_label,
                         days,
                         dry_run,
                         &total_bytes,
@@ -256,10 +250,8 @@ fn path_label(path: &Path) -> String {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn clean_one(
     dir: PathBuf,
-    max_label: usize,
     days: u32,
     dry_run: bool,
     total_bytes: &AtomicU64,
@@ -268,14 +260,13 @@ async fn clean_one(
     items: &Mutex<Vec<TreeItem>>,
 ) {
     let label = path_label(&dir);
-    let padded = pad_right(&label, max_label);
 
     let started = Instant::now();
     let children = match read_children(&dir) {
         Ok(c) => c,
         Err(e) => {
             let detail = ItemDetail::failure(format!("{e}"));
-            warn!("✗ {padded}  {}", ui::format_detail(&detail));
+            warn!("✗ {label}  {}", ui::format_detail(&detail));
             items.lock().unwrap().push(TreeItem {
                 label,
                 detail,
@@ -328,8 +319,9 @@ async fn clean_one(
         )
     };
 
-    let icon = if all_ok { "✓" } else { "✗" };
-    info!("{icon} {padded}  {}", ui::format_detail(&detail));
+    if !all_ok {
+        warn!("✗ {label}  {}", ui::format_detail(&detail));
+    }
 
     bar.inc(1);
     let running_bytes = total_bytes.load(Ordering::Relaxed);

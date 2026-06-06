@@ -10,7 +10,7 @@ use tracing::{Instrument, info, info_span, warn};
 
 use super::CommandSummary;
 use crate::config::CleanTrashConfig;
-use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
+use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration};
 use crate::walk::dir_size;
 
 #[derive(ClapArgs, Debug, Default)]
@@ -56,19 +56,12 @@ pub async fn run(_args: Args, cfg: &CleanTrashConfig, dry_run: bool) -> Result<C
         let total_count = AtomicU64::new(0);
         let items: Mutex<Vec<TreeItem>> = Mutex::new(Vec::new());
 
-        let max_label = work
-            .iter()
-            .map(|(_, label)| label.chars().count())
-            .max()
-            .unwrap_or(0);
-
         // Process serially. Concurrent rm operations on the same parent directory
         // do not parallelize well, and the per-entry filesystem operations are quick.
         for (path, label) in work {
             clean_one(
                 path,
                 label,
-                max_label,
                 dry_run,
                 &total_bytes,
                 &total_count,
@@ -153,19 +146,15 @@ fn entry_label(path: &Path, trash: &Path, prefix: &str) -> String {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn clean_one(
     path: PathBuf,
     label: String,
-    max_label: usize,
     dry_run: bool,
     total_bytes: &AtomicU64,
     total_count: &AtomicU64,
     bar: &CommandBar,
     items: &Mutex<Vec<TreeItem>>,
 ) {
-    let padded = pad_right(&label, max_label);
-
     let started = Instant::now();
     let is_dir = path.is_dir();
     let size = if is_dir {
@@ -181,7 +170,6 @@ async fn clean_one(
         total_bytes.fetch_add(size, Ordering::Relaxed);
         total_count.fetch_add(1, Ordering::Relaxed);
         let detail = ItemDetail::dry_run("would delete", format_size(size, BINARY));
-        info!("✓ {padded}  {}", ui::format_detail(&detail));
         (true, detail)
     } else {
         let res = if is_dir {
@@ -198,12 +186,11 @@ async fn clean_one(
                     format_size(size, BINARY),
                     format_duration(started.elapsed().as_millis() as u64),
                 );
-                info!("✓ {padded}  {}", ui::format_detail(&detail));
                 (true, detail)
             }
             Err(e) => {
                 let detail = ItemDetail::failure(format!("{e}"));
-                warn!("✗ {padded}  {}", ui::format_detail(&detail));
+                warn!("✗ {label}  {}", ui::format_detail(&detail));
                 (false, detail)
             }
         }

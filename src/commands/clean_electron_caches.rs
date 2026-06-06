@@ -11,7 +11,7 @@ use tracing::{Instrument, info, info_span, warn};
 
 use super::CommandSummary;
 use crate::config::{CleanElectronCachesConfig, expand_tilde};
-use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
+use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration};
 use crate::walk::{dir_size, older_than_days};
 
 pub const DEFAULT_DAYS: u32 = 0;
@@ -119,11 +119,6 @@ pub async fn run(
         ));
 
         let support_for_labels = Arc::new(support_dir.clone());
-        let max_label = candidates
-            .iter()
-            .map(|d| dir_label(d, &support_dir).chars().count())
-            .max()
-            .unwrap_or(0);
         let sem = Arc::new(Semaphore::new(concurrency.max(1)));
         let mut set: JoinSet<()> = JoinSet::new();
         for dir in candidates {
@@ -138,7 +133,6 @@ pub async fn run(
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
                     clean_one(
                         dir,
-                        max_label,
                         dry_run,
                         &total_bytes,
                         &total_count,
@@ -196,7 +190,6 @@ fn dir_label(dir: &Path, support_dir: &Path) -> String {
 #[allow(clippy::too_many_arguments)]
 async fn clean_one(
     dir: PathBuf,
-    max_label: usize,
     dry_run: bool,
     total_bytes: &AtomicU64,
     total_count: &AtomicU64,
@@ -205,7 +198,6 @@ async fn clean_one(
     support_dir: &Path,
 ) {
     let label = dir_label(&dir, support_dir);
-    let padded = pad_right(&label, max_label);
 
     let started = Instant::now();
     let size = dir_size(&dir).await.unwrap_or(0);
@@ -214,7 +206,6 @@ async fn clean_one(
         total_bytes.fetch_add(size, Ordering::Relaxed);
         total_count.fetch_add(1, Ordering::Relaxed);
         let detail = ItemDetail::dry_run("would delete", format_size(size, BINARY));
-        info!("✓ {padded}  {}", ui::format_detail(&detail));
         (true, detail)
     } else {
         match tokio::fs::remove_dir_all(&dir).await {
@@ -226,12 +217,11 @@ async fn clean_one(
                     format_size(size, BINARY),
                     format_duration(started.elapsed().as_millis() as u64),
                 );
-                info!("✓ {padded}  {}", ui::format_detail(&detail));
                 (true, detail)
             }
             Err(e) => {
                 let detail = ItemDetail::failure(format!("{e}"));
-                warn!("✗ {padded}  {}", ui::format_detail(&detail));
+                warn!("✗ {label}  {}", ui::format_detail(&detail));
                 (false, detail)
             }
         }

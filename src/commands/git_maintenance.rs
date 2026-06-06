@@ -11,7 +11,7 @@ use tracing::{Instrument, info, info_span, warn};
 
 use super::CommandSummary;
 use crate::config::{GitMaintenanceConfig, GitMaintenanceOverride, resolve_roots};
-use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
+use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration};
 use crate::walk::{dir_size, find_dirs_with_marker};
 use humansize::{BINARY, format_size};
 
@@ -222,12 +222,6 @@ pub async fn run(
         let items: Arc<Mutex<Vec<TreeItem>>> = Arc::new(Mutex::new(Vec::new()));
         let totals = Arc::new(Totals::default());
 
-        let max_label = repos
-            .iter()
-            .map(|r| repo_label(r).chars().count())
-            .max()
-            .unwrap_or(0);
-
         let sem = Arc::new(Semaphore::new(concurrency.max(1)));
         let mut set: JoinSet<()> = JoinSet::new();
         for repo in repos {
@@ -239,7 +233,7 @@ pub async fn run(
             set.spawn(
                 async move {
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
-                    maintain_one(repo, max_label, &bar, &items, &totals, fsck, &skip).await;
+                    maintain_one(repo, &bar, &items, &totals, fsck, &skip).await;
                 }
                 .in_current_span(),
             );
@@ -296,7 +290,6 @@ struct Totals {
 
 async fn maintain_one(
     repo: PathBuf,
-    max_label: usize,
     bar: &CommandBar,
     items: &Mutex<Vec<TreeItem>>,
     totals: &Totals,
@@ -304,7 +297,6 @@ async fn maintain_one(
     skip: &HashSet<String>,
 ) {
     let label = repo_label(&repo);
-    let padded = pad_right(&label, max_label);
 
     let gitdir = resolve_gitdir(&repo);
     let size_before = dir_size(&gitdir).await.unwrap_or(0);
@@ -351,7 +343,7 @@ async fn maintain_one(
     let (ok, detail) = if let Some((step, err)) = failure {
         let suffix = format!("{step}: {err} ({elapsed})");
         let detail = ItemDetail::failure(suffix);
-        warn!("✗ {padded}  {}", ui::format_detail(&detail));
+        warn!("✗ {label}  {}", ui::format_detail(&detail));
         (false, detail)
     } else {
         if size_after < size_before {
@@ -383,7 +375,6 @@ async fn maintain_one(
         if !notes.is_empty() {
             detail = detail.with_suffix(notes);
         }
-        info!("✓ {padded}  {}", ui::format_detail(&detail));
         (true, detail)
     };
 

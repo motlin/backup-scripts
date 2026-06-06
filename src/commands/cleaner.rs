@@ -9,7 +9,7 @@ use tokio::task::JoinSet;
 use tracing::{Instrument, info, warn};
 
 use super::CommandSummary;
-use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration, pad_right};
+use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration};
 use crate::walk::{dir_size, find_dirs_with_marker, older_than_days};
 
 /// Caller is responsible for wrapping this future in its own `info_span!` (e.g.
@@ -63,11 +63,6 @@ pub async fn clean(
             (p, label)
         })
         .collect();
-    let max_label = labeled
-        .iter()
-        .map(|(_, l)| l.chars().count())
-        .max()
-        .unwrap_or(0);
 
     let sem = Arc::new(Semaphore::new(concurrency.max(1)));
     let mut set: JoinSet<()> = JoinSet::new();
@@ -83,7 +78,6 @@ pub async fn clean(
                 clean_one(
                     project,
                     label,
-                    max_label,
                     junk,
                     dry_run,
                     &total_bytes,
@@ -150,7 +144,6 @@ fn project_label(project: &Path, roots: &[PathBuf]) -> String {
 async fn clean_one(
     project: PathBuf,
     label: String,
-    max_label: usize,
     junk: &str,
     dry_run: bool,
     total_bytes: &AtomicU64,
@@ -159,7 +152,6 @@ async fn clean_one(
     items: &Mutex<Vec<TreeItem>>,
 ) {
     let junk_path = project.join(junk);
-    let padded = pad_right(&label, max_label);
 
     let started = Instant::now();
     let size = dir_size(&junk_path).await.unwrap_or(0);
@@ -168,7 +160,6 @@ async fn clean_one(
         total_bytes.fetch_add(size, Ordering::Relaxed);
         total_count.fetch_add(1, Ordering::Relaxed);
         let detail = ItemDetail::dry_run("would delete", format_size(size, BINARY));
-        info!("✓ {padded}  {}", ui::format_detail(&detail));
         (true, detail)
     } else {
         match tokio::fs::remove_dir_all(&junk_path).await {
@@ -180,12 +171,11 @@ async fn clean_one(
                     format_size(size, BINARY),
                     format_duration(started.elapsed().as_millis() as u64),
                 );
-                info!("✓ {padded}  {}", ui::format_detail(&detail));
                 (true, detail)
             }
             Err(e) => {
                 let detail = ItemDetail::failure(format!("{e}"));
-                warn!("✗ {padded}  {}", ui::format_detail(&detail));
+                warn!("✗ {label}  {}", ui::format_detail(&detail));
                 (false, detail)
             }
         }
