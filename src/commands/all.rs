@@ -120,7 +120,7 @@ pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
 
         // Always print the aggregate summary of completed steps, even when a
         // step failed mid-run, before propagating that failure.
-        print_aggregate_summary(&results, started.elapsed());
+        print_aggregate_summary(&results, started.elapsed(), dry_run);
 
         if let Some(command) = rerun_command(&results, dry_run) {
             let skipped = results.iter().filter(|r| r.summary.skipped()).count();
@@ -375,7 +375,19 @@ fn tally(results: &[StepResult]) -> Tally {
     t
 }
 
-fn print_aggregate_summary(results: &[StepResult], elapsed: std::time::Duration) {
+/// Header for the per-command results table, noting dry-run mode so the bare
+/// size column isn't read as already-freed bytes.
+fn results_header(dry_run: bool) -> &'static str {
+    if dry_run {
+        "all: per-command results (dry run):"
+    } else {
+        "all: per-command results:"
+    }
+}
+
+/// Render the final aggregate line, using `would free` in dry-run mode so the
+/// summary can't be mistaken for actual deletions.
+fn aggregate_line(results: &[StepResult], elapsed: std::time::Duration, dry_run: bool) -> String {
     let mut total = CommandSummary::default();
     for r in results {
         total.merge(r.summary);
@@ -386,7 +398,17 @@ fn print_aggregate_summary(results: &[StepResult], elapsed: std::time::Duration)
         skipped,
     } = tally(results);
 
-    info!("all: per-command results:");
+    let verb = if dry_run { "would free" } else { "freed" };
+    format!(
+        "all: {passed} passed, {failed} failed, {skipped} skipped, {verb} {} across {} items in {}",
+        format_size(total.bytes_freed, BINARY),
+        total.items_total(),
+        format_duration(elapsed.as_millis() as u64),
+    )
+}
+
+fn print_aggregate_summary(results: &[StepResult], elapsed: std::time::Duration, dry_run: bool) {
+    info!("{}", results_header(dry_run));
     let max_name = results
         .iter()
         .map(|r| r.name.chars().count())
@@ -401,12 +423,7 @@ fn print_aggregate_summary(results: &[StepResult], elapsed: std::time::Duration)
             step_counts(&r.summary),
         );
     }
-    info!(
-        "all: {passed} passed, {failed} failed, {skipped} skipped, {} freed across {} items in {}",
-        format_size(total.bytes_freed, BINARY),
-        total.items_total(),
-        format_duration(elapsed.as_millis() as u64),
-    );
+    info!("{}", aggregate_line(results, elapsed, dry_run));
 }
 
 /// Build the `backup all --only …` command that re-runs exactly the steps that
@@ -451,6 +468,32 @@ mod tests {
         let mut s = CommandSummary::skipped_one();
         s.merge(CommandSummary::failed_one());
         assert_eq!(step_status(&s), "FAIL");
+    }
+
+    #[test]
+    fn results_header_notes_dry_run() {
+        assert_eq!(results_header(false), "all: per-command results:");
+        assert_eq!(results_header(true), "all: per-command results (dry run):");
+    }
+
+    #[test]
+    fn aggregate_line_dry_run_says_would_free() {
+        let results = vec![step("a", CommandSummary::ok_one_with_bytes(1024))];
+        let line = aggregate_line(&results, std::time::Duration::from_millis(1200), true);
+        assert_eq!(
+            line,
+            "all: 1 passed, 0 failed, 0 skipped, would free 1 KiB across 1 items in 1.2s"
+        );
+    }
+
+    #[test]
+    fn aggregate_line_real_run_says_freed() {
+        let results = vec![step("a", CommandSummary::ok_one_with_bytes(1024))];
+        let line = aggregate_line(&results, std::time::Duration::from_millis(1200), false);
+        assert_eq!(
+            line,
+            "all: 1 passed, 0 failed, 0 skipped, freed 1 KiB across 1 items in 1.2s"
+        );
     }
 
     #[test]
