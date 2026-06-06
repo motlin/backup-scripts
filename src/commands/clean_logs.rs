@@ -90,7 +90,6 @@ pub async fn run(args: Args, cfg: &CleanLogsConfig, dry_run: bool) -> Result<Com
             let bar = Arc::clone(&bar);
             let items = Arc::clone(&items);
             let cache_for_labels = Arc::clone(&cache_for_labels);
-            let label = file_label(&file, &cache_dir);
             set.spawn(
                 async move {
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
@@ -106,7 +105,7 @@ pub async fn run(args: Args, cfg: &CleanLogsConfig, dry_run: bool) -> Result<Com
                     )
                     .await;
                 }
-                .instrument(info_span!("log", name = %label)),
+                .in_current_span(),
             );
         }
         while set.join_next().await.is_some() {}

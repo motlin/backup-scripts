@@ -87,7 +87,6 @@ pub async fn run(args: Args, cfg: &CleanXcodeConfig, dry_run: bool) -> Result<Co
             let bar = Arc::clone(&bar);
             let items = Arc::clone(&items);
             let data_for_labels = Arc::clone(&data_for_labels);
-            let label = dir_label(&dir, &data_dir);
             set.spawn(
                 async move {
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
@@ -103,7 +102,7 @@ pub async fn run(args: Args, cfg: &CleanXcodeConfig, dry_run: bool) -> Result<Co
                     )
                     .await;
                 }
-                .instrument(info_span!("project", name = %label)),
+                .in_current_span(),
             );
         }
         while set.join_next().await.is_some() {}

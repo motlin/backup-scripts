@@ -115,7 +115,6 @@ pub async fn run(args: Args, cfg: &CleanSteamConfig, dry_run: bool) -> Result<Co
             let bar = Arc::clone(&bar);
             let items = Arc::clone(&items);
             let steam_for_labels = Arc::clone(&steam_for_labels);
-            let label = target_label(&dir, &steam_dir);
             set.spawn(
                 async move {
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
@@ -132,7 +131,7 @@ pub async fn run(args: Args, cfg: &CleanSteamConfig, dry_run: bool) -> Result<Co
                     )
                     .await;
                 }
-                .instrument(info_span!("target", name = %label)),
+                .in_current_span(),
             );
         }
         while set.join_next().await.is_some() {}

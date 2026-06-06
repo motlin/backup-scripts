@@ -100,7 +100,6 @@ pub async fn run(
             let total_count = Arc::clone(&total_count);
             let bar = Arc::clone(&bar);
             let items = Arc::clone(&items);
-            let label = path_label(&dir);
             set.spawn(
                 async move {
                     let _permit = sem.acquire_owned().await.expect("semaphore closed");
@@ -116,7 +115,7 @@ pub async fn run(
                     )
                     .await;
                 }
-                .instrument(info_span!("cache", name = %label)),
+                .in_current_span(),
             );
         }
         while set.join_next().await.is_some() {}
