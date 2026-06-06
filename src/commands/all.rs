@@ -3,9 +3,10 @@ use clap::Args as ClapArgs;
 use humansize::{BINARY, format_size};
 use std::collections::HashSet;
 use std::time::Instant;
-use tracing::{Instrument, info, info_span, warn};
+use tracing::{Instrument, info_span, warn};
 
 use crate::config::AppConfig;
+use crate::ui;
 use crate::ui::format_duration;
 
 use super::{
@@ -124,8 +125,10 @@ pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
 
         if let Some(command) = rerun_command(&results, dry_run) {
             let skipped = results.iter().filter(|r| r.summary.skipped()).count();
-            info!("all: {skipped} cleaner(s) skipped. Re-run just those:");
-            info!("  {command}");
+            ui::emit_line(&format!(
+                "all: {skipped} cleaner(s) skipped. Re-run just those:"
+            ));
+            ui::emit_line(&format!("  {command}"));
         }
 
         outcome
@@ -407,8 +410,12 @@ fn aggregate_line(results: &[StepResult], elapsed: std::time::Duration, dry_run:
     )
 }
 
+/// Print the aggregate summary through `ui::emit_line` (like the per-command
+/// trees) rather than `tracing`, so the block renders as plain lines without the
+/// hierarchical layer's span connectors.
 fn print_aggregate_summary(results: &[StepResult], elapsed: std::time::Duration, dry_run: bool) {
-    info!("{}", results_header(dry_run));
+    ui::emit_line("");
+    ui::emit_line(results_header(dry_run));
     let max_name = results
         .iter()
         .map(|r| r.name.chars().count())
@@ -417,13 +424,13 @@ fn print_aggregate_summary(results: &[StepResult], elapsed: std::time::Duration,
     for r in results {
         let status = step_status(&r.summary);
         let padded = format!("{:<width$}", r.name, width = max_name);
-        info!(
+        ui::emit_line(&format!(
             "  [{status}] {padded}  {:>10}  {}",
             format_size(r.summary.bytes_freed, BINARY),
             step_counts(&r.summary),
-        );
+        ));
     }
-    info!("{}", aggregate_line(results, elapsed, dry_run));
+    ui::emit_line(&aggregate_line(results, elapsed, dry_run));
 }
 
 /// Build the `backup all --only …` command that re-runs exactly the steps that
