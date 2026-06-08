@@ -13,12 +13,12 @@ pub const DEFAULT_SCOPE: &str = "system";
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Only prune objects older than this many hours. [config: clean_docker.hours, default: 720]
+    /// Only prune objects older than this many hours. [config: `clean_docker.hours`, default: 720]
     #[arg(long)]
     hours: Option<u32>,
 
     /// Prune scope. Currently only "system" is supported (covers images, containers,
-    /// volumes, build cache, networks). [config: clean_docker.scope, default: system]
+    /// volumes, build cache, networks). [config: `clean_docker.scope`, default: system]
     #[arg(long)]
     scope: Option<String>,
 }
@@ -92,10 +92,8 @@ async fn run_df() -> Result<CommandSummary> {
     }
 
     info!(
-        reclaimable = %reclaimable
-            .map(|b| format_size(b, BINARY))
-            .unwrap_or_else(|| "unknown".to_string()),
-        elapsed_ms = started.elapsed().as_millis() as u64,
+        reclaimable = %reclaimable.map_or_else(|| "unknown".to_string(), |b| format_size(b, BINARY)),
+        elapsed_ms = started.elapsed().as_millis(),
         "dry run: would prune objects shown above"
     );
     Ok(CommandSummary::ok_one_with_bytes(reclaimable.unwrap_or(0)))
@@ -127,11 +125,9 @@ async fn run_prune(hours: u32) -> Result<CommandSummary> {
     let reclaimed = parse_total_reclaimed(&stdout);
 
     info!(
-        reclaimed = %reclaimed
-            .map(|b| format_size(b, BINARY))
-            .unwrap_or_else(|| "unknown".to_string()),
+        reclaimed = %reclaimed.map_or_else(|| "unknown".to_string(), |b| format_size(b, BINARY)),
         filter = %filter,
-        elapsed_ms = started.elapsed().as_millis() as u64,
+        elapsed_ms = started.elapsed().as_millis(),
         "pruned"
     );
     Ok(CommandSummary::ok_one_with_bytes(reclaimed.unwrap_or(0)))
@@ -192,8 +188,7 @@ fn parse_size(raw: &str) -> Option<u64> {
     let split = s
         .char_indices()
         .find(|(_, c)| c.is_ascii_alphabetic())
-        .map(|(i, _)| i)
-        .unwrap_or(s.len());
+        .map_or(s.len(), |(i, _)| i);
     let (num, unit) = s.split_at(split);
     let value: f64 = num.parse().ok()?;
     let multiplier: f64 = match unit.to_ascii_uppercase().as_str() {
@@ -208,7 +203,11 @@ fn parse_size(raw: &str) -> Option<u64> {
         "TIB" => 1_024.0_f64.powi(4),
         _ => return None,
     };
-    Some((value * multiplier) as u64)
+    // A parsed, non-negative byte count; truncating the fractional part to a
+    // whole number of bytes is the intended behavior.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let bytes = (value * multiplier) as u64;
+    Some(bytes)
 }
 
 #[cfg(test)]

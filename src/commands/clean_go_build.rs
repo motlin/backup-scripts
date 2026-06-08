@@ -37,7 +37,7 @@ pub async fn run(_args: Args, _cfg: &CleanGoBuildConfig, dry_run: bool) -> Resul
         }
         let verb = if dry_run { "would clean" } else { "cleaned" };
         info!(
-            elapsed = %format_duration(started.elapsed().as_millis() as u64),
+            elapsed = %format_duration(started.elapsed().as_millis()),
             "go build cache {verb}"
         );
         Ok(CommandSummary::ok_one())

@@ -14,15 +14,15 @@ pub const DEFAULT_CONCURRENCY: usize = 4;
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Path to Cypress binary cache. [config: clean_cypress.cache_dir, default: ~/Library/Caches/Cypress]
+    /// Path to Cypress binary cache. [config: `clean_cypress.cache_dir`, default: ~/Library/Caches/Cypress]
     #[arg(long)]
     pub cache_dir: Option<PathBuf>,
 
-    /// Only delete Cypress version dirs older than this many days. 0 = always clean. [config: clean_cypress.days, default: 30]
+    /// Only delete Cypress version dirs older than this many days. 0 = always clean. [config: `clean_cypress.days`, default: 30]
     #[arg(long)]
     pub days: Option<u32>,
 
-    /// Maximum number of parallel deletions. [config: clean_cypress.concurrency, default: 4]
+    /// Maximum number of parallel deletions. [config: `clean_cypress.concurrency`, default: 4]
     #[arg(long)]
     pub concurrency: Option<usize>,
 }
@@ -31,8 +31,7 @@ pub async fn run(args: Args, cfg: &CleanCypressConfig, dry_run: bool) -> Result<
     let cache_dir = args
         .cache_dir
         .or_else(|| cfg.cache_dir.clone())
-        .map(|p| expand_tilde(&p))
-        .unwrap_or_else(default_cache_dir);
+        .map_or_else(default_cache_dir, |p| expand_tilde(&p));
     let days = args.days.or(cfg.days).unwrap_or(DEFAULT_DAYS);
     let concurrency = args
         .concurrency
@@ -93,9 +92,8 @@ fn find_version_dirs(cache_dir: &Path) -> Vec<PathBuf> {
 
     let mut dirs: Vec<PathBuf> = Vec::new();
     for entry in read_dir.flatten() {
-        let file_type = match entry.file_type() {
-            Ok(ft) => ft,
-            Err(_) => continue,
+        let Ok(file_type) = entry.file_type() else {
+            continue;
         };
         if !file_type.is_dir() {
             continue;

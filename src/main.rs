@@ -23,7 +23,7 @@ enum Command {
     /// Run all configured maintenance steps in `all.steps` order.
     All(commands::all::Args),
 
-    /// Delete old Backblaze bz_done_*.dat files to reclaim disk space.
+    /// Delete old Backblaze `bz_done`_*.dat files to reclaim disk space.
     BzCleanup(commands::bz_cleanup::Args),
 
     /// Run aggressive maintenance (pack-refs, reflog expire, rerere gc, worktree prune,
@@ -34,7 +34,7 @@ enum Command {
     /// Delete stale Maven target/ directories.
     CleanMaven(commands::clean_maven::Args),
 
-    /// Delete stale node_modules/ directories.
+    /// Delete stale `node_modules`/ directories.
     CleanNode(commands::clean_node::Args),
 
     /// Delete stale Cargo target/ directories.
@@ -49,7 +49,7 @@ enum Command {
     /// Delete old files and directories from /tmp and other temp locations.
     CleanTmp(commands::clean_tmp::Args),
 
-    /// Delete stale per-project Xcode DerivedData directories.
+    /// Delete stale per-project Xcode `DerivedData` directories.
     CleanXcode(commands::clean_xcode::Args),
 
     /// Prune unused Docker images, containers, volumes, build cache, and networks.
@@ -74,13 +74,13 @@ enum Command {
     /// Run `pip cache purge` to clear the pip download cache.
     CleanPip(commands::clean_pip::Args),
 
-    /// Run `pod cache clean --all` to clear the CocoaPods download cache.
+    /// Run `pod cache clean --all` to clear the `CocoaPods` download cache.
     CleanCocoapods(commands::clean_cocoapods::Args),
 
     /// Run `go clean -cache` to clear the Go build cache.
     CleanGoBuild(commands::clean_go_build::Args),
 
-    /// Delete stale per-product JetBrains IDE caches (~/Library/Caches/JetBrains/*).
+    /// Delete stale per-product `JetBrains` IDE caches (~/Library/Caches/JetBrains/*).
     /// Skips the `Toolbox` subdir (installed IDE binaries, not a cache). Close
     /// the relevant IDEs before running to avoid index corruption.
     CleanJetbrains(commands::clean_jetbrains::Args),
@@ -96,15 +96,15 @@ enum Command {
     /// each path's contents but keeps the parent dir intact.
     CleanLibraryCaches(commands::clean_library_caches::Args),
 
-    /// Delete render/HTTP caches (Cache, Code Cache, GPUCache) from an allowlist
+    /// Delete render/HTTP caches (Cache, Code Cache, `GPUCache`) from an allowlist
     /// of Electron desktop apps under `~/Library/Application Support/<App>`
-    /// (Slack, Discord, Superhuman, Termius, WorkFlowy, Wispr Flow, Claude,
+    /// (Slack, Discord, Superhuman, Termius, `WorkFlowy`, Wispr Flow, Claude,
     /// Brave). Never touches Local Storage/IndexedDB/Cookies/Service Worker.
     /// Quit each app first — an open app can corrupt its caches mid-delete.
     CleanElectronCaches(commands::clean_electron_caches::Args),
 
     /// Reclaim space under `~/Library/Application Support/Google/Chrome` by
-    /// scrubbing on-device model bundles (OptGuide*, SODA*, WasmTtsEngine, …)
+    /// scrubbing on-device model bundles (`OptGuide`*, SODA*, `WasmTtsEngine`, …)
     /// and per-profile `Service Worker/CacheStorage` offline snapshots (the
     /// largest Chrome cache; SW registrations and auth are left intact).
     /// Refuses to run while Chrome is open. Chrome re-downloads models on
@@ -149,6 +149,9 @@ enum Command {
     CleanRustup(commands::clean_rustup::Args),
 }
 
+// A flat `match` over every subcommand; each arm is a couple of lines. The length
+// is inherent to the dispatch table and would only be obscured by indirection.
+#[allow(clippy::too_many_lines)]
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -171,23 +174,26 @@ async fn main() -> Result<()> {
         Command::BzCleanup(args) => commands::bz_cleanup::run(args, &cfg.bz_cleanup, cli.dry_run)
             .await
             .map(drop),
-        Command::GitMaintenance(args) => {
-            commands::git_maintenance::run(args, &cfg.git_maintenance, &cfg.roots, cli.dry_run)
-                .await
-                .map(drop)
-        }
+        Command::GitMaintenance(args) => commands::git_maintenance::run(
+            args,
+            &cfg.git_maintenance,
+            cfg.roots.as_ref(),
+            cli.dry_run,
+        )
+        .await
+        .map(drop),
         Command::CleanMaven(args) => {
-            commands::clean_maven::run(args, &cfg.clean_maven, &cfg.roots, cli.dry_run)
+            commands::clean_maven::run(args, &cfg.clean_maven, cfg.roots.as_ref(), cli.dry_run)
                 .await
                 .map(drop)
         }
         Command::CleanNode(args) => {
-            commands::clean_node::run(args, &cfg.clean_node, &cfg.roots, cli.dry_run)
+            commands::clean_node::run(args, &cfg.clean_node, cfg.roots.as_ref(), cli.dry_run)
                 .await
                 .map(drop)
         }
         Command::CleanCargo(args) => {
-            commands::clean_cargo::run(args, &cfg.clean_cargo, &cfg.roots, cli.dry_run)
+            commands::clean_cargo::run(args, &cfg.clean_cargo, cfg.roots.as_ref(), cli.dry_run)
                 .await
                 .map(drop)
         }

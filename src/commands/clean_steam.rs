@@ -25,20 +25,20 @@ const DEFAULT_CACHE_DIRS: &[&str] = &["steamapps/shadercache", "steamapps/downlo
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Steam root. [config: clean_steam.steam_dir, default: ~/Library/Application Support/Steam]
+    /// Steam root. [config: `clean_steam.steam_dir`, default: ~/Library/Application Support/Steam]
     #[arg(long)]
     pub steam_dir: Option<PathBuf>,
 
-    /// Only delete child entries older than this many days. 0 = always clean. [config: clean_steam.days, default: 0]
+    /// Only delete child entries older than this many days. 0 = always clean. [config: `clean_steam.days`, default: 0]
     #[arg(long)]
     pub days: Option<u32>,
 
-    /// Maximum number of parallel deletions across target dirs. [config: clean_steam.concurrency, default: 4]
+    /// Maximum number of parallel deletions across target dirs. [config: `clean_steam.concurrency`, default: 4]
     #[arg(long)]
     pub concurrency: Option<usize>,
 
     /// Skip the safety check that refuses to run while Steam is open.
-    /// Implied by --dry-run. [config: clean_steam.skip_running_check, default: false]
+    /// Implied by --dry-run. [config: `clean_steam.skip_running_check`, default: false]
     #[arg(long)]
     pub skip_running_check: bool,
 }
@@ -58,10 +58,12 @@ pub async fn run(args: Args, cfg: &CleanSteamConfig, dry_run: bool) -> Result<Co
     let skip_running_check =
         args.skip_running_check || cfg.skip_running_check.unwrap_or(false) || dry_run;
 
-    let cache_dirs: Vec<String> = cfg
-        .cache_dirs
-        .clone()
-        .unwrap_or_else(|| DEFAULT_CACHE_DIRS.iter().map(|s| s.to_string()).collect());
+    let cache_dirs: Vec<String> = cfg.cache_dirs.clone().unwrap_or_else(|| {
+        DEFAULT_CACHE_DIRS
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect()
+    });
 
     async move {
         if !steam_dir.is_dir() {
@@ -147,7 +149,10 @@ mod tests {
     }
 
     fn default_cache_dirs() -> Vec<String> {
-        DEFAULT_CACHE_DIRS.iter().map(|s| s.to_string()).collect()
+        DEFAULT_CACHE_DIRS
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect()
     }
 
     #[test]

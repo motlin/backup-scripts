@@ -14,7 +14,7 @@ pub struct Args {
     /// Actually uninstall the removable toolchains. Without this flag the command
     /// only previews what it would remove (never uninstalls). The active, default,
     /// and any directory-overridden toolchains are always skipped regardless.
-    /// [config: clean_rustup.remove, default: false]
+    /// [config: `clean_rustup.remove`, default: false]
     #[arg(long)]
     remove: bool,
 }
@@ -61,7 +61,7 @@ pub async fn run(args: Args, cfg: &CleanRustupConfig, dry_run: bool) -> Result<C
             }
             let why = if dry_run { "dry run" } else { "no --remove" };
             info!(
-                elapsed = %format_duration(started.elapsed().as_millis() as u64),
+                elapsed = %format_duration(started.elapsed().as_millis()),
                 "{why}: would uninstall {} toolchain(s)",
                 removable.len(),
             );
@@ -75,7 +75,7 @@ pub async fn run(args: Args, cfg: &CleanRustupConfig, dry_run: bool) -> Result<C
         }
 
         info!(
-            elapsed = %format_duration(started.elapsed().as_millis() as u64),
+            elapsed = %format_duration(started.elapsed().as_millis()),
             "uninstalled {} of {} toolchain(s)",
             summary.items_ok,
             removable.len(),
@@ -178,8 +178,7 @@ fn removable_toolchains(list_output: &str, overridden: &HashSet<String>) -> Vec<
             // The parenthesized markers tell us this toolchain is in use.
             let markers = line
                 .split_once('(')
-                .map(|(_, rest)| rest.trim_end_matches(')'))
-                .unwrap_or("");
+                .map_or("", |(_, rest)| rest.trim_end_matches(')'));
             let in_use = markers
                 .split(',')
                 .map(str::trim)
@@ -220,7 +219,7 @@ mod tests {
     use super::*;
 
     fn set(items: &[&str]) -> HashSet<String> {
-        items.iter().map(|s| s.to_string()).collect()
+        items.iter().map(std::string::ToString::to_string).collect()
     }
 
     #[test]

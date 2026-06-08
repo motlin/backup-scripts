@@ -33,15 +33,15 @@ const DEFAULT_PATHS: &[&str] = &[
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Cache dirs to scrub. May be repeated. [config: clean_library_caches.paths]
+    /// Cache dirs to scrub. May be repeated. [config: `clean_library_caches.paths`]
     #[arg(long)]
     pub path: Vec<PathBuf>,
 
-    /// Only delete child entries older than this many days. 0 = always clean. [config: clean_library_caches.days, default: 0]
+    /// Only delete child entries older than this many days. 0 = always clean. [config: `clean_library_caches.days`, default: 0]
     #[arg(long)]
     pub days: Option<u32>,
 
-    /// Maximum number of parallel deletions across cache dirs. [config: clean_library_caches.concurrency, default: 4]
+    /// Maximum number of parallel deletions across cache dirs. [config: `clean_library_caches.concurrency`, default: 4]
     #[arg(long)]
     pub concurrency: Option<usize>,
 }
@@ -52,9 +52,9 @@ pub async fn run(
     dry_run: bool,
 ) -> Result<CommandSummary> {
     let paths = if !args.path.is_empty() {
-        expand_tildes(args.path)
+        expand_tildes(&args.path)
     } else if let Some(p) = cfg.paths.as_ref().filter(|p| !p.is_empty()) {
-        expand_tildes(p.clone())
+        expand_tildes(p)
     } else {
         default_paths()
     };
@@ -104,5 +104,6 @@ fn path_label(path: &Path) -> String {
 }
 
 fn default_paths() -> Vec<PathBuf> {
-    expand_tildes(DEFAULT_PATHS.iter().map(PathBuf::from).collect())
+    let defaults: Vec<PathBuf> = DEFAULT_PATHS.iter().map(PathBuf::from).collect();
+    expand_tildes(&defaults)
 }

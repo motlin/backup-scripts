@@ -102,11 +102,12 @@ fn resolve_steps(mut steps: Vec<String>, skip: &[String], only: &[String]) -> Re
 }
 
 pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
-    let configured: Vec<String> = config
-        .all
-        .steps
-        .clone()
-        .unwrap_or_else(|| DEFAULT_STEPS.iter().map(|s| s.to_string()).collect());
+    let configured: Vec<String> = config.all.steps.clone().unwrap_or_else(|| {
+        DEFAULT_STEPS
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect()
+    });
 
     let steps = resolve_steps(configured, &args.skip, &args.only)?;
 
@@ -162,13 +163,16 @@ async fn run_steps(
 
 /// Dispatch a single step by name to its cleaner, returning that cleaner's
 /// `CommandSummary`.
+// A flat `match` mapping each step name to its command's `run`; every arm is a few
+// lines. The length is inherent to the dispatch table.
+#[allow(clippy::too_many_lines)]
 async fn run_step(step: &str, config: &AppConfig, dry_run: bool) -> Result<CommandSummary> {
     let summary = match step {
         "git-maintenance" => {
             git_maintenance::run(
                 git_maintenance::Args::default(),
                 &config.git_maintenance,
-                &config.roots,
+                config.roots.as_ref(),
                 dry_run,
             )
             .await?
@@ -177,7 +181,7 @@ async fn run_step(step: &str, config: &AppConfig, dry_run: bool) -> Result<Comma
             clean_maven::run(
                 clean_maven::Args::default(),
                 &config.clean_maven,
-                &config.roots,
+                config.roots.as_ref(),
                 dry_run,
             )
             .await?
@@ -186,7 +190,7 @@ async fn run_step(step: &str, config: &AppConfig, dry_run: bool) -> Result<Comma
             clean_node::run(
                 clean_node::Args::default(),
                 &config.clean_node,
-                &config.roots,
+                config.roots.as_ref(),
                 dry_run,
             )
             .await?
@@ -195,7 +199,7 @@ async fn run_step(step: &str, config: &AppConfig, dry_run: bool) -> Result<Comma
             clean_cargo::run(
                 clean_cargo::Args::default(),
                 &config.clean_cargo,
-                &config.roots,
+                config.roots.as_ref(),
                 dry_run,
             )
             .await?
@@ -406,7 +410,7 @@ fn aggregate_line(results: &[StepResult], elapsed: std::time::Duration, dry_run:
         "all: {passed} passed, {failed} failed, {skipped} skipped, {verb} {} across {} items in {}",
         format_size(total.bytes_freed, BINARY),
         total.items_total(),
-        format_duration(elapsed.as_millis() as u64),
+        format_duration(elapsed.as_millis()),
     )
 }
 
@@ -513,7 +517,7 @@ mod tests {
     }
 
     fn steps_vec(names: &[&str]) -> Vec<String> {
-        names.iter().map(|s| s.to_string()).collect()
+        names.iter().map(std::string::ToString::to_string).collect()
     }
 
     #[test]

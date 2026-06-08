@@ -16,15 +16,15 @@ pub const DEFAULT_CONCURRENCY: usize = 8;
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Path to the Gradle modules cache. [config: clean_gradle.cache_dir, default: ~/.gradle/caches/modules-2/files-2.1]
+    /// Path to the Gradle modules cache. [config: `clean_gradle.cache_dir`, default: ~/.gradle/caches/modules-2/files-2.1]
     #[arg(long)]
     cache_dir: Option<PathBuf>,
 
-    /// Only delete version directories older than this many days. 0 = always clean. [config: clean_gradle.days, default: 60]
+    /// Only delete version directories older than this many days. 0 = always clean. [config: `clean_gradle.days`, default: 60]
     #[arg(long)]
     days: Option<u32>,
 
-    /// Maximum number of parallel deletions. [config: clean_gradle.concurrency, default: 8]
+    /// Maximum number of parallel deletions. [config: `clean_gradle.concurrency`, default: 8]
     #[arg(long)]
     concurrency: Option<usize>,
 }
@@ -33,8 +33,7 @@ pub async fn run(args: Args, cfg: &CleanGradleConfig, dry_run: bool) -> Result<C
     let cache_dir = args
         .cache_dir
         .or_else(|| cfg.cache_dir.clone())
-        .map(|p| expand_tilde(&p))
-        .unwrap_or_else(default_gradle_cache);
+        .map_or_else(default_gradle_cache, |p| expand_tilde(&p));
     let days = args.days.or(cfg.days).unwrap_or(DEFAULT_DAYS);
     let concurrency = args
         .concurrency
@@ -84,7 +83,7 @@ pub async fn run(args: Args, cfg: &CleanGradleConfig, dry_run: bool) -> Result<C
 ///
 /// We identify version dirs structurally: walk the cache and for every regular file at
 /// depth 5 (cache=0, group=1, artifact=2, version=3, hash=4, file=5), record the
-/// grandparent (the version dir). This mirrors clean_m2's approach of deriving version
+/// grandparent (the version dir). This mirrors `clean_m2`'s approach of deriving version
 /// dirs from the files they contain, but uses depth instead of a marker extension since
 /// Gradle's cache stores each artifact's files under per-hash subdirectories.
 fn find_version_dirs(cache_dir: &Path) -> Vec<PathBuf> {

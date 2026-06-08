@@ -13,12 +13,9 @@ pub struct Args {}
 
 pub async fn run(_args: Args, _cfg: &CleanPipConfig, dry_run: bool) -> Result<CommandSummary> {
     async move {
-        let invocation = match detect_pip().await {
-            Some(inv) => inv,
-            None => {
-                warn!("pip not on PATH (tried `pip`, `python3 -m pip`) — skipping");
-                return Ok(CommandSummary::skipped_one());
-            }
+        let Some(invocation) = detect_pip().await else {
+            warn!("pip not on PATH (tried `pip`, `python3 -m pip`) — skipping");
+            return Ok(CommandSummary::skipped_one());
         };
         if dry_run {
             info!("dry run: would run `{} cache purge`", invocation.display());
@@ -41,7 +38,7 @@ pub async fn run(_args: Args, _cfg: &CleanPipConfig, dry_run: bool) -> Result<Co
             return Ok(CommandSummary::failed_one());
         }
         info!(
-            elapsed = %format_duration(started.elapsed().as_millis() as u64),
+            elapsed = %format_duration(started.elapsed().as_millis()),
             "pip cache purged"
         );
         Ok(CommandSummary::ok_one())

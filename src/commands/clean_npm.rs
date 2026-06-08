@@ -18,15 +18,15 @@ pub const DEFAULT_CONCURRENCY: usize = 4;
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Path to the npm cacache directory. [config: clean_npm.cache_dir, default: ~/.npm/_cacache]
+    /// Path to the npm cacache directory. [config: `clean_npm.cache_dir`, default: ~/.npm/_cacache]
     #[arg(long)]
     pub cache_dir: Option<PathBuf>,
 
-    /// Only delete cache entries older than this many days. 0 = always clean. [config: clean_npm.days, default: 30]
+    /// Only delete cache entries older than this many days. 0 = always clean. [config: `clean_npm.days`, default: 30]
     #[arg(long)]
     pub days: Option<u32>,
 
-    /// Maximum number of parallel deletions. [config: clean_npm.concurrency, default: 4]
+    /// Maximum number of parallel deletions. [config: `clean_npm.concurrency`, default: 4]
     #[arg(long)]
     pub concurrency: Option<usize>,
 }
@@ -35,8 +35,7 @@ pub async fn run(args: Args, cfg: &CleanNpmConfig, dry_run: bool) -> Result<Comm
     let cache_dir = args
         .cache_dir
         .or_else(|| cfg.cache_dir.clone())
-        .map(|p| expand_tilde(&p))
-        .unwrap_or_else(default_npm_cache);
+        .map_or_else(default_npm_cache, |p| expand_tilde(&p));
     let days = args.days.or(cfg.days).unwrap_or(DEFAULT_DAYS);
     let concurrency = args
         .concurrency
@@ -96,7 +95,7 @@ async fn clean_one(path: PathBuf, progress: &CleanProgress, cache_dir: &std::pat
     let label = relative_label(&path, cache_dir);
 
     let started = Instant::now();
-    let size = std::fs::metadata(&path).ok().map(|m| m.len()).unwrap_or(0);
+    let size = std::fs::metadata(&path).ok().map_or(0, |m| m.len());
 
     if progress.dry_run() {
         let detail = ItemDetail::dry_run("would delete", format_size(size, BINARY));
@@ -109,7 +108,7 @@ async fn clean_one(path: PathBuf, progress: &CleanProgress, cache_dir: &std::pat
             let detail = ItemDetail::success(
                 "deleted",
                 format_size(size, BINARY),
-                format_duration(started.elapsed().as_millis() as u64),
+                format_duration(started.elapsed().as_millis()),
             );
             progress.record(label, detail, true, size);
         }

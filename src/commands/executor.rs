@@ -151,7 +151,7 @@ pub async fn delete_dir(dir: &Path, label: String, progress: &CleanProgress) {
             let detail = ItemDetail::success(
                 "deleted",
                 format_size(size, BINARY),
-                format_duration(started.elapsed().as_millis() as u64),
+                format_duration(started.elapsed().as_millis()),
             );
             progress.record(label, detail, true, size);
         }
@@ -224,7 +224,7 @@ pub async fn delete_children(dir: &Path, days: u32, label: String, progress: &Cl
         ItemDetail::success(
             "deleted",
             format_size(freed, BINARY),
-            format_duration(started.elapsed().as_millis() as u64),
+            format_duration(started.elapsed().as_millis()),
         )
     };
 

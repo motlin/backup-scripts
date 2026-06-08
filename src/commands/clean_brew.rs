@@ -13,7 +13,7 @@ pub const DEFAULT_PRUNE: &str = "all";
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
     /// Value passed to `brew cleanup --prune=<value>`. "all" also clears the
-    /// download cache. [config: clean_brew.prune, default: all]
+    /// download cache. [config: `clean_brew.prune`, default: all]
     #[arg(long)]
     prune: Option<String>,
 }
@@ -68,10 +68,8 @@ async fn run_brew_cleanup(prune: &str, dry_run: bool) -> Result<CommandSummary> 
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let freed = parse_freed_bytes(&stdout);
-    let freed_str = freed
-        .map(|b| format_size(b, BINARY))
-        .unwrap_or_else(|| "unknown".to_string());
-    let elapsed_ms = started.elapsed().as_millis() as u64;
+    let freed_str = freed.map_or_else(|| "unknown".to_string(), |b| format_size(b, BINARY));
+    let elapsed_ms = started.elapsed().as_millis();
 
     if dry_run {
         info!(elapsed_ms, "dry run: brew cleanup would free {freed_str}");
@@ -104,8 +102,7 @@ fn parse_size(raw: &str) -> Option<u64> {
     let split = s
         .char_indices()
         .find(|(_, c)| c.is_ascii_alphabetic())
-        .map(|(i, _)| i)
-        .unwrap_or(s.len());
+        .map_or(s.len(), |(i, _)| i);
     let (num, unit) = s.split_at(split);
     let value: f64 = num.parse().ok()?;
     let multiplier: f64 = match unit.to_ascii_uppercase().as_str() {
@@ -120,7 +117,11 @@ fn parse_size(raw: &str) -> Option<u64> {
         "TIB" => 1_024.0_f64.powi(4),
         _ => return None,
     };
-    Some((value * multiplier) as u64)
+    // A parsed, non-negative byte count; truncating the fractional part to a
+    // whole number of bytes is the intended behavior.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let bytes = (value * multiplier) as u64;
+    Some(bytes)
 }
 
 #[cfg(test)]

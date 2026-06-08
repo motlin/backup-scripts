@@ -160,10 +160,7 @@ async fn clean_one(
     let size = if is_dir {
         dir_size(&path).await.unwrap_or(0)
     } else {
-        std::fs::symlink_metadata(&path)
-            .ok()
-            .map(|m| m.len())
-            .unwrap_or(0)
+        std::fs::symlink_metadata(&path).ok().map_or(0, |m| m.len())
     };
 
     let (ok, detail) = if dry_run {
@@ -184,7 +181,7 @@ async fn clean_one(
                 let detail = ItemDetail::success(
                     "deleted",
                     format_size(size, BINARY),
-                    format_duration(started.elapsed().as_millis() as u64),
+                    format_duration(started.elapsed().as_millis()),
                 );
                 (true, detail)
             }

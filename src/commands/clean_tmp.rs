@@ -17,15 +17,15 @@ pub const DEFAULT_CONCURRENCY: usize = 2;
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Paths to clean (defaults to /tmp). [config: clean_tmp.roots, default: /tmp]
+    /// Paths to clean (defaults to /tmp). [config: `clean_tmp.roots`, default: /tmp]
     #[arg(long = "root")]
     pub roots: Vec<PathBuf>,
 
-    /// Only delete files/dirs older than this many days. 0 = always clean. [config: clean_tmp.days, default: 30]
+    /// Only delete files/dirs older than this many days. 0 = always clean. [config: `clean_tmp.days`, default: 30]
     #[arg(long)]
     pub days: Option<u32>,
 
-    /// Maximum number of parallel deletions. [config: clean_tmp.concurrency, default: 2]
+    /// Maximum number of parallel deletions. [config: `clean_tmp.concurrency`, default: 2]
     #[arg(long)]
     pub concurrency: Option<usize>,
 }
@@ -94,7 +94,7 @@ async fn clean_one(path: PathBuf, progress: &CleanProgress) {
     let size = if path.is_dir() {
         dir_size(&path).await.unwrap_or(0)
     } else {
-        std::fs::metadata(&path).ok().map(|m| m.len()).unwrap_or(0)
+        std::fs::metadata(&path).ok().map_or(0, |m| m.len())
     };
 
     if progress.dry_run() {
@@ -104,9 +104,9 @@ async fn clean_one(path: PathBuf, progress: &CleanProgress) {
     }
 
     let result = if path.is_dir() {
-        tokio::fs::remove_dir_all(&path).await.map(|_| ())
+        tokio::fs::remove_dir_all(&path).await
     } else {
-        tokio::fs::remove_file(&path).await.map(|_| ())
+        tokio::fs::remove_file(&path).await
     };
 
     match result {
@@ -114,7 +114,7 @@ async fn clean_one(path: PathBuf, progress: &CleanProgress) {
             let detail = ItemDetail::success(
                 "deleted",
                 format_size(size, BINARY),
-                format_duration(started.elapsed().as_millis() as u64),
+                format_duration(started.elapsed().as_millis()),
             );
             progress.record(label, detail, true, size);
         }

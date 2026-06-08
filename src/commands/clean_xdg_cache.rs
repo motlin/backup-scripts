@@ -16,11 +16,11 @@ pub const DEFAULT_NODE_DAYS: u32 = 14;
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Base XDG cache directory. [config: clean_xdg_cache.cache_dir, default: $XDG_CACHE_HOME or ~/.cache]
+    /// Base XDG cache directory. [config: `clean_xdg_cache.cache_dir`, default: $`XDG_CACHE_HOME` or ~/.cache]
     #[arg(long)]
     pub cache_dir: Option<PathBuf>,
 
-    /// Only delete node cache entries older than this many days. 0 = always clean. [config: clean_xdg_cache.node_days, default: 14]
+    /// Only delete node cache entries older than this many days. 0 = always clean. [config: `clean_xdg_cache.node_days`, default: 14]
     #[arg(long)]
     pub node_days: Option<u32>,
 }
@@ -47,8 +47,7 @@ pub async fn run(args: Args, cfg: &CleanXdgCacheConfig, dry_run: bool) -> Result
     let cache_dir = args
         .cache_dir
         .or_else(|| cfg.cache_dir.clone())
-        .map(|p| expand_tilde(&p))
-        .unwrap_or_else(default_cache_dir);
+        .map_or_else(default_cache_dir, |p| expand_tilde(&p));
     let node_days = args
         .node_days
         .or(cfg.node_days)
@@ -97,7 +96,7 @@ async fn run_uv_prune(dry_run: bool) -> Result<CommandSummary> {
     }
 
     info!(
-        elapsed = %format_duration(started.elapsed().as_millis() as u64),
+        elapsed = %format_duration(started.elapsed().as_millis()),
         "`uv cache prune` removed unreachable cache entries"
     );
     Ok(CommandSummary::ok_one())
@@ -133,7 +132,7 @@ async fn run_precommit_gc(dry_run: bool) -> Result<CommandSummary> {
     }
 
     info!(
-        elapsed = %format_duration(started.elapsed().as_millis() as u64),
+        elapsed = %format_duration(started.elapsed().as_millis()),
         "`pre-commit gc` removed unused hook environments"
     );
     Ok(CommandSummary::ok_one())

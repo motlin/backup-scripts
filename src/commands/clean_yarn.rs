@@ -37,7 +37,7 @@ pub async fn run(_args: Args, _cfg: &CleanYarnConfig, dry_run: bool) -> Result<C
             return Ok(CommandSummary::failed_one());
         }
         info!(
-            elapsed = %format_duration(started.elapsed().as_millis() as u64),
+            elapsed = %format_duration(started.elapsed().as_millis()),
             "yarn cache cleaned"
         );
         Ok(CommandSummary::ok_one())

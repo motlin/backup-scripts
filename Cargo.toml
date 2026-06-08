@@ -27,7 +27,7 @@ strip = true
 [lints.rust]
 unsafe_code = "forbid"
 missing_debug_implementations = "warn"
-# `unreachable_pub` flags 462 items in this binary crate; enabling it would mean
+# `unreachable_pub` flags ~480 items in this binary crate; enabling it would mean
 # rewriting nearly every command module's visibility. Left as "allow" for now.
 unreachable_pub = "allow"
 rust_2024_compatibility = { level = "warn", priority = -1 }
@@ -37,7 +37,4 @@ tail_expr_drop_order = "allow"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
-# `clippy::pedantic` produces ~400 findings across 18 distinct lints on this
-# codebase (doc_markdown, cast_possible_truncation, map_unwrap_or, etc.).
-# Kept as "allow" to avoid a sweeping refactor; flip to "warn" to enable later.
-pedantic = "allow"
+pedantic = { level = "warn", priority = -1 }

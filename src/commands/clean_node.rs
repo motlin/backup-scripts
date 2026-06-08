@@ -13,19 +13,19 @@ pub const DEFAULT_CONCURRENCY: usize = 4;
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Roots to search for Node projects. [config: clean_node.roots or roots, default: ~/projects]
+    /// Roots to search for Node projects. [config: `clean_node.roots` or roots, default: ~/projects]
     #[arg(long = "root")]
     pub roots: Vec<PathBuf>,
 
-    /// Maximum directory depth when searching for package.json. [config: clean_node.depth, default: 5]
+    /// Maximum directory depth when searching for package.json. [config: `clean_node.depth`, default: 5]
     #[arg(long)]
     pub depth: Option<usize>,
 
-    /// Only clean node_modules/ dirs older than this many days. 0 = always clean. [config: clean_node.days, default: 14]
+    /// Only clean `node_modules`/ dirs older than this many days. 0 = always clean. [config: `clean_node.days`, default: 14]
     #[arg(long)]
     pub days: Option<u32>,
 
-    /// Maximum number of parallel deletions. [config: clean_node.concurrency, default: 2]
+    /// Maximum number of parallel deletions. [config: `clean_node.concurrency`, default: 2]
     #[arg(long)]
     pub concurrency: Option<usize>,
 }
@@ -33,7 +33,7 @@ pub struct Args {
 pub async fn run(
     args: Args,
     cfg: &CleanNodeConfig,
-    global_roots: &Option<Vec<PathBuf>>,
+    global_roots: Option<&Vec<PathBuf>>,
     dry_run: bool,
 ) -> Result<CommandSummary> {
     let depth = args.depth.or(cfg.depth).unwrap_or(DEFAULT_DEPTH);
@@ -42,7 +42,7 @@ pub async fn run(
         .concurrency
         .or(cfg.concurrency)
         .unwrap_or(DEFAULT_CONCURRENCY);
-    let roots = resolve_roots(args.roots, &cfg.roots, global_roots, "clean_node")?;
+    let roots = resolve_roots(&args.roots, cfg.roots.as_ref(), global_roots, "clean_node")?;
 
     cleaner::clean(cleaner::Config {
         bar_label: "clean-node",

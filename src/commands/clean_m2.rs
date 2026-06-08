@@ -17,23 +17,23 @@ pub const DEFAULT_MARKER_EXTENSION: &str = "pom";
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Path to the Maven local repository. [config: clean_m2.repo, default: ~/.m2/repository]
+    /// Path to the Maven local repository. [config: `clean_m2.repo`, default: ~/.m2/repository]
     #[arg(long)]
     repo: Option<PathBuf>,
 
-    /// Only delete version directories older than this many days. 0 = always clean. [config: clean_m2.days, default: 60]
+    /// Only delete version directories older than this many days. 0 = always clean. [config: `clean_m2.days`, default: 60]
     #[arg(long)]
     days: Option<u32>,
 
-    /// Restrict to SNAPSHOT versions only (directories ending in `-SNAPSHOT`). [config: clean_m2.snapshots_only, default: false]
+    /// Restrict to SNAPSHOT versions only (directories ending in `-SNAPSHOT`). [config: `clean_m2.snapshots_only`, default: false]
     #[arg(long)]
     snapshots_only: bool,
 
-    /// Maximum number of parallel deletions. [config: clean_m2.concurrency, default: 8]
+    /// Maximum number of parallel deletions. [config: `clean_m2.concurrency`, default: 8]
     #[arg(long)]
     concurrency: Option<usize>,
 
-    /// File extension used to identify version directories. [config: clean_m2.marker_extension, default: pom]
+    /// File extension used to identify version directories. [config: `clean_m2.marker_extension`, default: pom]
     #[arg(long)]
     marker_extension: Option<String>,
 }
@@ -42,8 +42,7 @@ pub async fn run(args: Args, cfg: &CleanM2Config, dry_run: bool) -> Result<Comma
     let repo = args
         .repo
         .or_else(|| cfg.repo.clone())
-        .map(|p| expand_tilde(&p))
-        .unwrap_or_else(default_m2_repo);
+        .map_or_else(default_m2_repo, |p| expand_tilde(&p));
     let days = args.days.or(cfg.days).unwrap_or(DEFAULT_DAYS);
     let snapshots_only = args.snapshots_only || cfg.snapshots_only.unwrap_or(false);
     let concurrency = args

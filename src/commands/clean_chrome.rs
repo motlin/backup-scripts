@@ -33,20 +33,20 @@ const DEFAULT_PROFILE_SUBDIRS: &[&str] = &["Service Worker/CacheStorage"];
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Chrome user-data root. [config: clean_chrome.chrome_dir, default: ~/Library/Application Support/Google/Chrome]
+    /// Chrome user-data root. [config: `clean_chrome.chrome_dir`, default: ~/Library/Application Support/Google/Chrome]
     #[arg(long)]
     pub chrome_dir: Option<PathBuf>,
 
-    /// Only delete child entries older than this many days. 0 = always clean. [config: clean_chrome.days, default: 0]
+    /// Only delete child entries older than this many days. 0 = always clean. [config: `clean_chrome.days`, default: 0]
     #[arg(long)]
     pub days: Option<u32>,
 
-    /// Maximum number of parallel deletions across target dirs. [config: clean_chrome.concurrency, default: 4]
+    /// Maximum number of parallel deletions across target dirs. [config: `clean_chrome.concurrency`, default: 4]
     #[arg(long)]
     pub concurrency: Option<usize>,
 
     /// Skip the safety check that refuses to run while Chrome is open.
-    /// Implied by --dry-run. [config: clean_chrome.skip_running_check, default: false]
+    /// Implied by --dry-run. [config: `clean_chrome.skip_running_check`, default: false]
     #[arg(long)]
     pub skip_running_check: bool,
 }
@@ -66,14 +66,16 @@ pub async fn run(args: Args, cfg: &CleanChromeConfig, dry_run: bool) -> Result<C
     let skip_running_check =
         args.skip_running_check || cfg.skip_running_check.unwrap_or(false) || dry_run;
 
-    let model_dirs: Vec<String> = cfg
-        .model_dirs
-        .clone()
-        .unwrap_or_else(|| DEFAULT_MODEL_DIRS.iter().map(|s| s.to_string()).collect());
+    let model_dirs: Vec<String> = cfg.model_dirs.clone().unwrap_or_else(|| {
+        DEFAULT_MODEL_DIRS
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect()
+    });
     let profile_subdirs: Vec<String> = cfg.profile_subdirs.clone().unwrap_or_else(|| {
         DEFAULT_PROFILE_SUBDIRS
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect()
     });
 
@@ -207,7 +209,7 @@ mod tests {
     fn default_subdirs() -> Vec<String> {
         DEFAULT_PROFILE_SUBDIRS
             .iter()
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .collect()
     }
 

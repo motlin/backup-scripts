@@ -40,19 +40,19 @@ const DEFAULT_APPS: &[&str] = &[
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Path to `~/Library/Application Support`. [config: clean_electron_caches.support_dir, default: ~/Library/Application Support]
+    /// Path to `~/Library/Application Support`. [config: `clean_electron_caches.support_dir`, default: ~/Library/Application Support]
     #[arg(long)]
     pub support_dir: Option<PathBuf>,
 
-    /// App dir names to scrub. May be repeated. [config: clean_electron_caches.apps]
+    /// App dir names to scrub. May be repeated. [config: `clean_electron_caches.apps`]
     #[arg(long = "app")]
     pub app: Vec<String>,
 
-    /// Only delete cache subdirs older than this many days. 0 = always clean. [config: clean_electron_caches.days, default: 0]
+    /// Only delete cache subdirs older than this many days. 0 = always clean. [config: `clean_electron_caches.days`, default: 0]
     #[arg(long)]
     pub days: Option<u32>,
 
-    /// Maximum number of parallel deletions. [config: clean_electron_caches.concurrency, default: 4]
+    /// Maximum number of parallel deletions. [config: `clean_electron_caches.concurrency`, default: 4]
     #[arg(long)]
     pub concurrency: Option<usize>,
 }
@@ -65,8 +65,7 @@ pub async fn run(
     let support_dir = args
         .support_dir
         .or_else(|| cfg.support_dir.clone())
-        .map(|p| expand_tilde(&p))
-        .unwrap_or_else(default_support_dir);
+        .map_or_else(default_support_dir, |p| expand_tilde(&p));
     let apps: Vec<String> = if !args.app.is_empty() {
         args.app
     } else if let Some(a) = cfg.apps.as_ref().filter(|a| !a.is_empty()) {
@@ -153,7 +152,10 @@ fn default_support_dir() -> PathBuf {
 }
 
 fn default_apps() -> Vec<String> {
-    DEFAULT_APPS.iter().map(|s| s.to_string()).collect()
+    DEFAULT_APPS
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect()
 }
 
 #[cfg(test)]

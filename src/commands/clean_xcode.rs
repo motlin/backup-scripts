@@ -14,15 +14,15 @@ pub const DEFAULT_CONCURRENCY: usize = 4;
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Path to Xcode DerivedData. [config: clean_xcode.data_dir, default: ~/Library/Developer/Xcode/DerivedData]
+    /// Path to Xcode `DerivedData`. [config: `clean_xcode.data_dir`, default: ~/Library/Developer/Xcode/DerivedData]
     #[arg(long)]
     pub data_dir: Option<PathBuf>,
 
-    /// Only delete project dirs older than this many days. 0 = always clean. [config: clean_xcode.days, default: 30]
+    /// Only delete project dirs older than this many days. 0 = always clean. [config: `clean_xcode.days`, default: 30]
     #[arg(long)]
     pub days: Option<u32>,
 
-    /// Maximum number of parallel deletions. [config: clean_xcode.concurrency, default: 4]
+    /// Maximum number of parallel deletions. [config: `clean_xcode.concurrency`, default: 4]
     #[arg(long)]
     pub concurrency: Option<usize>,
 }
@@ -31,8 +31,7 @@ pub async fn run(args: Args, cfg: &CleanXcodeConfig, dry_run: bool) -> Result<Co
     let data_dir = args
         .data_dir
         .or_else(|| cfg.data_dir.clone())
-        .map(|p| expand_tilde(&p))
-        .unwrap_or_else(default_derived_data);
+        .map_or_else(default_derived_data, |p| expand_tilde(&p));
     let days = args.days.or(cfg.days).unwrap_or(DEFAULT_DAYS);
     let concurrency = args
         .concurrency
@@ -80,7 +79,7 @@ pub async fn run(args: Args, cfg: &CleanXcodeConfig, dry_run: bool) -> Result<Co
     .await
 }
 
-/// Each entry directly under DerivedData is one project's build cache, named like
+/// Each entry directly under `DerivedData` is one project's build cache, named like
 /// `<project-name>-<hash>`. We only consider TOP-LEVEL directory entries — we do not
 /// recurse — so a single mtime check on the project dir decides eligibility. This is
 /// fast and aligns with how Xcode regenerates these caches on the next build.
@@ -95,9 +94,8 @@ fn find_project_dirs(data_dir: &Path) -> Vec<PathBuf> {
 
     let mut dirs: Vec<PathBuf> = Vec::new();
     for entry in read_dir.flatten() {
-        let file_type = match entry.file_type() {
-            Ok(ft) => ft,
-            Err(_) => continue,
+        let Ok(file_type) = entry.file_type() else {
+            continue;
         };
         if !file_type.is_dir() {
             continue;

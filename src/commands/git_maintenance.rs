@@ -1,6 +1,7 @@
 use anyhow::{Result, bail};
 use clap::Args as ClapArgs;
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -111,20 +112,20 @@ fn ordered_skipped(skip: &HashSet<String>) -> Vec<&'static str> {
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Roots to search for git repositories. [config: git_maintenance.roots or roots; no default — required]
+    /// Roots to search for git repositories. [config: `git_maintenance.roots` or roots; no default — required]
     #[arg(long = "root")]
     roots: Vec<PathBuf>,
 
-    /// Maximum directory depth when searching for repos. [config: git_maintenance.depth, default: 3]
+    /// Maximum directory depth when searching for repos. [config: `git_maintenance.depth`, default: 3]
     #[arg(long)]
     depth: Option<usize>,
 
-    /// Maximum number of maintenance sequences to run in parallel. [config: git_maintenance.concurrency, default: 8]
+    /// Maximum number of maintenance sequences to run in parallel. [config: `git_maintenance.concurrency`, default: 8]
     #[arg(long)]
     concurrency: Option<usize>,
 
     /// Skip submodules (those whose `.git` is a file pointing to the superproject).
-    /// Submodules are included by default. [config: git_maintenance.submodules, default: true]
+    /// Submodules are included by default. [config: `git_maintenance.submodules`, default: true]
     #[arg(long)]
     no_submodules: bool,
 
@@ -134,10 +135,14 @@ pub struct Args {
     fsck: bool,
 }
 
+// Linear orchestration: discover repos, fan out maintenance tasks, then render a
+// single summary. Splitting it would scatter shared state across helpers without
+// improving readability.
+#[allow(clippy::too_many_lines)]
 pub async fn run(
     args: Args,
     cfg: &GitMaintenanceConfig,
-    global_roots: &Option<Vec<PathBuf>>,
+    global_roots: Option<&Vec<PathBuf>>,
     dry_run: bool,
 ) -> Result<CommandSummary> {
     let depth = args.depth.or(cfg.depth).unwrap_or(DEFAULT_DEPTH);
@@ -152,7 +157,12 @@ pub async fn run(
     };
     let fsck = args.fsck;
 
-    let roots = resolve_roots(args.roots, &cfg.roots, global_roots, "git_maintenance")?;
+    let roots = resolve_roots(
+        &args.roots,
+        cfg.roots.as_ref(),
+        global_roots,
+        "git_maintenance",
+    )?;
     let overrides = cfg.overrides.clone().unwrap_or_default();
     validate_overrides(&overrides)?;
 
@@ -179,16 +189,13 @@ pub async fn run(
         let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
         let mut deduped: Vec<PathBuf> = Vec::new();
         for repo in repos {
-            match git_common_dir(&repo).await {
-                Some(common) => {
-                    if seen.insert(common) {
-                        deduped.push(repo);
-                    }
-                }
-                None => {
-                    warn!("could not resolve git common dir for {}", repo.display());
+            if let Some(common) = git_common_dir(&repo).await {
+                if seen.insert(common) {
                     deduped.push(repo);
                 }
+            } else {
+                warn!("could not resolve git common dir for {}", repo.display());
+                deduped.push(repo);
             }
         }
         let repos = deduped;
@@ -274,9 +281,10 @@ pub async fn run(
 }
 
 fn repo_label(repo: &std::path::Path) -> String {
-    repo.file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| repo.display().to_string())
+    repo.file_name().map_or_else(
+        || repo.display().to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    )
 }
 
 /// Running byte totals across all successfully-maintained repos: gross bytes
@@ -316,7 +324,7 @@ async fn maintain_one(
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 let compact = stderr
                     .lines()
-                    .map(|l| l.trim())
+                    .map(str::trim)
                     .filter(|l| !l.is_empty())
                     .collect::<Vec<_>>()
                     .join("; ");
@@ -336,7 +344,7 @@ async fn maintain_one(
         None
     };
 
-    let elapsed_ms = started.elapsed().as_millis() as u64;
+    let elapsed_ms = started.elapsed().as_millis();
     let elapsed = format_duration(elapsed_ms);
     let size_after = dir_size(&gitdir).await.unwrap_or(size_before);
 
@@ -364,12 +372,12 @@ async fn maintain_one(
         let mut notes = String::new();
         let skipped = ordered_skipped(skip);
         if !skipped.is_empty() {
-            notes.push_str(&format!("; skipped: {}", skipped.join(", ")));
+            let _ = write!(notes, "; skipped: {}", skipped.join(", "));
         }
         if let Some(s) = &fsck_summary
             && !s.is_empty()
         {
-            notes.push_str(&format!("; fsck: {s}"));
+            let _ = write!(notes, "; fsck: {s}");
         }
         let mut detail = ItemDetail::success(verb, size_str, &elapsed);
         if !notes.is_empty() {
@@ -439,12 +447,11 @@ fn freed_summary(reclaimed: u64, added: u64) -> String {
 }
 
 fn delta_components(before: u64, after: u64) -> (&'static str, String) {
-    if after < before {
-        ("freed", format_size(before - after, BINARY))
-    } else if after > before {
-        ("+", format_size(after - before, BINARY))
-    } else {
-        ("no change", String::new())
+    use std::cmp::Ordering;
+    match after.cmp(&before) {
+        Ordering::Less => ("freed", format_size(before - after, BINARY)),
+        Ordering::Greater => ("+", format_size(after - before, BINARY)),
+        Ordering::Equal => ("no change", String::new()),
     }
 }
 
@@ -497,7 +504,7 @@ mod tests {
     fn over(repo: &str, skip: &[&str]) -> GitMaintenanceOverride {
         GitMaintenanceOverride {
             repo: repo.to_string(),
-            skip_steps: skip.iter().map(|s| s.to_string()).collect(),
+            skip_steps: skip.iter().map(std::string::ToString::to_string).collect(),
         }
     }
 
@@ -560,9 +567,9 @@ mod tests {
     #[test]
     fn net_phrase_shrink_equal_grow() {
         assert_eq!(net_phrase(1024, 0), "1 KiB freed");
-        assert_eq!(net_phrase(1048576, 1048576), "0 B freed");
+        assert_eq!(net_phrase(1_048_576, 1_048_576), "0 B freed");
         assert_eq!(net_phrase(0, 0), "0 B freed");
-        assert_eq!(net_phrase(1048576, 3 * 1048576), "grew by 2 MiB");
+        assert_eq!(net_phrase(1_048_576, 3 * 1_048_576), "grew by 2 MiB");
     }
 
     #[test]
@@ -574,7 +581,7 @@ mod tests {
     #[test]
     fn freed_summary_net_positive_with_growth() {
         assert_eq!(
-            freed_summary(3 * 1048576, 1048576),
+            freed_summary(3 * 1_048_576, 1_048_576),
             "2 MiB freed (3 MiB reclaimed, 1 MiB added back)"
         );
     }
@@ -582,7 +589,7 @@ mod tests {
     #[test]
     fn freed_summary_net_negative_with_growth() {
         assert_eq!(
-            freed_summary(1048576, 3 * 1048576),
+            freed_summary(1_048_576, 3 * 1_048_576),
             "grew by 2 MiB (1 MiB reclaimed, 3 MiB added back)"
         );
     }

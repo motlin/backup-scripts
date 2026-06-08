@@ -15,7 +15,7 @@ pub struct Args {}
 ///
 /// Two operations, both safe by design:
 ///   * `mise cache prune` — age-based GC of stale metadata under the cache dir.
-///     Preferred over `mise cache clear`, since http:/npm: backends symlink
+///     Preferred over `mise cache clear`, since <http:/npm>: backends symlink
 ///     installs into the cache (jdx/mise#7267) and a blanket clear would break
 ///     them.
 ///   * `mise prune` — removes tool VERSIONS no longer referenced by any tracked
@@ -39,7 +39,7 @@ pub async fn run(_args: Args, _cfg: &CleanMiseConfig, dry_run: bool) -> Result<C
         summary.merge(prune_summary);
 
         info!(
-            elapsed = %format_duration(started.elapsed().as_millis() as u64),
+            elapsed = %format_duration(started.elapsed().as_millis()),
             "{} {pruned} tool version(s)",
             if dry_run { "dry run: would prune" } else { "pruned" },
         );

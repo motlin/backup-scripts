@@ -26,7 +26,10 @@ pub struct WalkOptions {
 impl WalkOptions {
     pub fn fallback() -> Self {
         Self {
-            prune_dirs: FALLBACK_PRUNE_DIRS.iter().map(|s| s.to_string()).collect(),
+            prune_dirs: FALLBACK_PRUNE_DIRS
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
             follow_symlinks: false,
         }
     }
@@ -48,7 +51,11 @@ fn walk_opts() -> &'static WalkOptions {
 /// hidden (e.g. `.git`). Directories named in the walk config's `prune_dirs` are skipped.
 pub fn find_dirs_with_marker(root: &Path, marker: &str, max_depth: usize) -> Vec<PathBuf> {
     let opts = walk_opts();
-    let prune: Vec<&str> = opts.prune_dirs.iter().map(|s| s.as_str()).collect();
+    let prune: Vec<&str> = opts
+        .prune_dirs
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
     let marker_is_hidden = marker.starts_with('.');
 
     let walker = WalkDir::new(root)
@@ -112,9 +119,8 @@ pub fn older_than_days(path: &Path, days: u32) -> bool {
     };
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let cutoff = now.saturating_sub((days as u64) * 86_400);
+        .map_or(0, |d| d.as_secs());
+    let cutoff = now.saturating_sub(u64::from(days) * 86_400);
     mtime < cutoff
 }
 

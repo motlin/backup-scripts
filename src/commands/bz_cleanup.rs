@@ -18,21 +18,21 @@ pub const HELPER_PATH: &str = "/usr/local/bin/backup-bz-cleanup-helper";
 
 #[derive(ClapArgs, Debug, Default)]
 pub struct Args {
-    /// Delete files older than this many days (mtime +N). [config: bz_cleanup.days, default: 60]
+    /// Delete files older than this many days (mtime +N). [config: `bz_cleanup.days`, default: 60]
     #[arg(long)]
     days: Option<u32>,
 
-    /// Override the bzdatacenter directory. [config: bz_cleanup.dir, default: /Library/Backblaze.bzpkg/...]
+    /// Override the bzdatacenter directory. [config: `bz_cleanup.dir`, default: /Library/Backblaze.bzpkg/...]
     /// Note: only honored on the direct-sudo path; the installed helper hardcodes its own path.
     #[arg(long)]
     dir: Option<PathBuf>,
 
-    /// Filename pattern passed to `find -name`. [config: bz_cleanup.pattern, default: bz_done_*.dat]
+    /// Filename pattern passed to `find -name`. [config: `bz_cleanup.pattern`, default: `bz_done`_*.dat]
     #[arg(long)]
     pattern: Option<String>,
 
     /// Skip sudo. Only useful if the directory is already user-readable/writable.
-    /// [config: bz_cleanup.use_sudo, default: true]
+    /// [config: `bz_cleanup.use_sudo`, default: true]
     #[arg(long)]
     no_sudo: bool,
 }
@@ -42,8 +42,7 @@ pub async fn run(args: Args, cfg: &BzCleanupConfig, dry_run: bool) -> Result<Com
     let dir = args
         .dir
         .or_else(|| cfg.dir.clone())
-        .map(|p| expand_tilde(&p))
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_DIR));
+        .map_or_else(|| PathBuf::from(DEFAULT_DIR), |p| expand_tilde(&p));
     let pattern = args
         .pattern
         .or_else(|| cfg.pattern.clone())
@@ -183,7 +182,7 @@ async fn scan(dir: &Path, days: u32, pattern: &str, mode: ExecMode) -> Result<Sc
         info!(
             count,
             size = %format_size(bytes, BINARY),
-            elapsed_ms = started.elapsed().as_millis() as u64,
+            elapsed_ms = started.elapsed().as_millis(),
             "matched files"
         );
 
@@ -232,7 +231,7 @@ async fn delete(
         info!(
             count,
             reclaimed = %format_size(bytes, BINARY),
-            elapsed_ms = started.elapsed().as_millis() as u64,
+            elapsed_ms = started.elapsed().as_millis(),
             "deleted files"
         );
 

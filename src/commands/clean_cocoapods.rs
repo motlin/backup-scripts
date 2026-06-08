@@ -42,7 +42,7 @@ pub async fn run(
             return Ok(CommandSummary::failed_one());
         }
         info!(
-            elapsed = %format_duration(started.elapsed().as_millis() as u64),
+            elapsed = %format_duration(started.elapsed().as_millis()),
             "CocoaPods cache cleaned"
         );
         Ok(CommandSummary::ok_one())

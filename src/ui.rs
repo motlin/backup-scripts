@@ -233,10 +233,12 @@ fn format_detail_colored(d: &ItemDetail, color: bool) -> String {
 /// - `100ms-60s` → `X.Xs` (e.g. `9.6s`)
 /// - `60s-60m` → `XmYs` (e.g. `2m 15s`)
 /// - `>=60m` → `XhYm` (e.g. `1h 5m`)
-pub fn format_duration(ms: u64) -> String {
+pub fn format_duration(ms: u128) -> String {
     if ms < 100 {
         format!("{ms}ms")
     } else if ms < 60_000 {
+        // `ms` is bounded below 60_000 here, well within f64's exact-integer range.
+        #[allow(clippy::cast_precision_loss)]
         let secs = ms as f64 / 1000.0;
         format!("{secs:.1}s")
     } else {
@@ -331,7 +333,7 @@ pub struct TreeItem {
     pub ok: bool,
 }
 
-/// Writer that pipes tracing-formatted log lines through MultiProgress::println so they
+/// Writer that pipes tracing-formatted log lines through `MultiProgress::println` so they
 /// land above the live bars cleanly.
 pub struct MpWriter;
 

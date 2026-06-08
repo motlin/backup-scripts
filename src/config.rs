@@ -287,7 +287,7 @@ pub struct CleanMiseConfig {}
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CleanXdgCacheConfig {
-    /// Base XDG cache directory. Default: $XDG_CACHE_HOME or ~/.cache.
+    /// Base XDG cache directory. Default: $`XDG_CACHE_HOME` or ~/.cache.
     pub cache_dir: Option<PathBuf>,
     /// Only scrub node cache entries older than this many days. Default: 14.
     pub node_days: Option<u32>,
@@ -306,7 +306,7 @@ pub struct CleanRustupConfig {
 pub struct BzCleanupConfig {
     pub days: Option<u32>,
     pub dir: Option<PathBuf>,
-    /// Glob pattern passed to `find -name`. Default: "bz_done_*.dat".
+    /// Glob pattern passed to `find -name`. Default: "`bz_done`_*.dat".
     pub pattern: Option<String>,
     /// Run the find/delete commands under sudo. Default: true.
     pub use_sudo: Option<bool>,
@@ -372,30 +372,30 @@ pub fn expand_tilde(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
-pub fn expand_tildes(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+pub fn expand_tildes(paths: &[PathBuf]) -> Vec<PathBuf> {
     paths.iter().map(|p| expand_tilde(p)).collect()
 }
 
 /// Resolve walking roots from the CLI, the command-specific config, and the global config.
 /// Errors if none of them provide a value — there is no hardcoded fallback.
 pub fn resolve_roots(
-    cli: Vec<PathBuf>,
-    cmd_cfg: &Option<Vec<PathBuf>>,
-    global_cfg: &Option<Vec<PathBuf>>,
+    cli: &[PathBuf],
+    cmd_cfg: Option<&Vec<PathBuf>>,
+    global_cfg: Option<&Vec<PathBuf>>,
     cmd_name: &str,
 ) -> Result<Vec<PathBuf>> {
     if !cli.is_empty() {
         return Ok(expand_tildes(cli));
     }
-    if let Some(c) = cmd_cfg.as_ref()
+    if let Some(c) = cmd_cfg
         && !c.is_empty()
     {
-        return Ok(expand_tildes(c.clone()));
+        return Ok(expand_tildes(c));
     }
-    if let Some(g) = global_cfg.as_ref()
+    if let Some(g) = global_cfg
         && !g.is_empty()
     {
-        return Ok(expand_tildes(g.clone()));
+        return Ok(expand_tildes(g));
     }
     bail!(
         "no roots configured for `{cmd_name}`: pass --root, or set `roots` (top-level) or `{cmd_name}.roots` in your config file"

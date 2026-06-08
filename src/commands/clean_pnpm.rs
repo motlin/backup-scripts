@@ -70,7 +70,7 @@ pub async fn run(_args: Args, _cfg: &CleanPnpmConfig, dry_run: bool) -> Result<C
         }
         info!(
             via = %pnpm.describe(),
-            elapsed = %format_duration(started.elapsed().as_millis() as u64),
+            elapsed = %format_duration(started.elapsed().as_millis()),
             "pnpm store pruned"
         );
         Ok(CommandSummary::ok_one())
