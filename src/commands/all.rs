@@ -3,7 +3,7 @@ use clap::Args as ClapArgs;
 use humansize::{BINARY, format_size};
 use std::collections::HashSet;
 use std::time::Instant;
-use tracing::{Instrument, info_span, warn};
+use tracing::warn;
 
 use crate::config::AppConfig;
 use crate::ui;
@@ -111,31 +111,27 @@ pub async fn run(args: Args, config: &AppConfig, dry_run: bool) -> Result<()> {
 
     let steps = resolve_steps(configured, &args.skip, &args.only)?;
 
-    async move {
-        if steps.is_empty() {
-            warn!("`all.steps` is empty — nothing to do");
-            return Ok(());
-        }
-
-        let started = Instant::now();
-        let (results, outcome) = run_steps(&steps, config, dry_run).await;
-
-        // Always print the aggregate summary of completed steps, even when a
-        // step failed mid-run, before propagating that failure.
-        print_aggregate_summary(&results, started.elapsed(), dry_run);
-
-        if let Some(command) = rerun_command(&results, dry_run) {
-            let skipped = results.iter().filter(|r| r.summary.skipped()).count();
-            ui::emit_line(&format!(
-                "all: {skipped} cleaner(s) skipped. Re-run just those:"
-            ));
-            ui::emit_line(&format!("  {command}"));
-        }
-
-        outcome
+    if steps.is_empty() {
+        warn!("`all.steps` is empty — nothing to do");
+        return Ok(());
     }
-    .instrument(info_span!("all"))
-    .await
+
+    let started = Instant::now();
+    let (results, outcome) = run_steps(&steps, config, dry_run).await;
+
+    // Always print the aggregate summary of completed steps, even when a
+    // step failed mid-run, before propagating that failure.
+    print_aggregate_summary(&results, started.elapsed(), dry_run);
+
+    if let Some(command) = rerun_command(&results, dry_run) {
+        let skipped = results.iter().filter(|r| r.summary.skipped()).count();
+        ui::emit_line(&format!(
+            "all: {skipped} cleaner(s) skipped. Re-run just those:"
+        ));
+        ui::emit_line(&format!("  {command}"));
+    }
+
+    outcome
 }
 
 /// Run each step in order, collecting a `StepResult` per completed step. On the

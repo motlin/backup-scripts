@@ -133,63 +133,59 @@ struct ScanResult {
 }
 
 async fn scan(dir: &Path, days: u32, pattern: &str, mode: ExecMode) -> Result<ScanResult> {
-    async {
-        let started = Instant::now();
-        let output = match mode {
-            ExecMode::Helper => Command::new("sudo")
-                .arg("-n")
-                .arg(HELPER_PATH)
-                .arg("scan")
-                .arg(pattern)
-                .arg(days.to_string())
-                .output()
-                .await
-                .context("failed to invoke bz-cleanup helper via sudo")?,
-            ExecMode::DirectSudo => Command::new("sudo")
-                .args(find_args(dir, days, pattern, false))
-                .output()
-                .await
-                .context("failed to invoke sudo find")?,
-            ExecMode::NoSudo => Command::new("find")
-                .args(find_args(dir, days, pattern, false))
-                .output()
-                .await
-                .context("failed to invoke find")?,
-        };
+    let started = Instant::now();
+    let output = match mode {
+        ExecMode::Helper => Command::new("sudo")
+            .arg("-n")
+            .arg(HELPER_PATH)
+            .arg("scan")
+            .arg(pattern)
+            .arg(days.to_string())
+            .output()
+            .await
+            .context("failed to invoke bz-cleanup helper via sudo")?,
+        ExecMode::DirectSudo => Command::new("sudo")
+            .args(find_args(dir, days, pattern, false))
+            .output()
+            .await
+            .context("failed to invoke sudo find")?,
+        ExecMode::NoSudo => Command::new("find")
+            .args(find_args(dir, days, pattern, false))
+            .output()
+            .await
+            .context("failed to invoke find")?,
+    };
 
-        if !output.status.success() {
-            bail!(
-                "scan failed ({}): {}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr).trim()
-            );
-        }
-
-        let mut count = 0u64;
-        let mut bytes = 0u64;
-        for line in std::str::from_utf8(&output.stdout)?.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-            let size: u64 = line
-                .parse()
-                .with_context(|| format!("unexpected stat output: {line:?}"))?;
-            count += 1;
-            bytes += size;
-        }
-
-        info!(
-            count,
-            size = %format_size(bytes, BINARY),
-            elapsed_ms = started.elapsed().as_millis(),
-            "matched files"
+    if !output.status.success() {
+        bail!(
+            "scan failed ({}): {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr).trim()
         );
-
-        Ok(ScanResult { count, bytes })
     }
-    .instrument(info_span!("scan"))
-    .await
+
+    let mut count = 0u64;
+    let mut bytes = 0u64;
+    for line in std::str::from_utf8(&output.stdout)?.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let size: u64 = line
+            .parse()
+            .with_context(|| format!("unexpected stat output: {line:?}"))?;
+        count += 1;
+        bytes += size;
+    }
+
+    info!(
+        count,
+        size = %format_size(bytes, BINARY),
+        elapsed_ms = started.elapsed().as_millis(),
+        "matched files"
+    );
+
+    Ok(ScanResult { count, bytes })
 }
 
 async fn delete(
@@ -200,45 +196,41 @@ async fn delete(
     count: u64,
     bytes: u64,
 ) -> Result<()> {
-    async {
-        let started = Instant::now();
-        let status = match mode {
-            ExecMode::Helper => Command::new("sudo")
-                .arg("-n")
-                .arg(HELPER_PATH)
-                .arg("delete")
-                .arg(pattern)
-                .arg(days.to_string())
-                .status()
-                .await
-                .context("failed to invoke bz-cleanup helper via sudo")?,
-            ExecMode::DirectSudo => Command::new("sudo")
-                .args(find_args(dir, days, pattern, true))
-                .status()
-                .await
-                .context("failed to invoke sudo find -delete")?,
-            ExecMode::NoSudo => Command::new("find")
-                .args(find_args(dir, days, pattern, true))
-                .status()
-                .await
-                .context("failed to invoke find -delete")?,
-        };
+    let started = Instant::now();
+    let status = match mode {
+        ExecMode::Helper => Command::new("sudo")
+            .arg("-n")
+            .arg(HELPER_PATH)
+            .arg("delete")
+            .arg(pattern)
+            .arg(days.to_string())
+            .status()
+            .await
+            .context("failed to invoke bz-cleanup helper via sudo")?,
+        ExecMode::DirectSudo => Command::new("sudo")
+            .args(find_args(dir, days, pattern, true))
+            .status()
+            .await
+            .context("failed to invoke sudo find -delete")?,
+        ExecMode::NoSudo => Command::new("find")
+            .args(find_args(dir, days, pattern, true))
+            .status()
+            .await
+            .context("failed to invoke find -delete")?,
+    };
 
-        if !status.success() {
-            bail!("find -delete failed: {status}");
-        }
-
-        info!(
-            count,
-            reclaimed = %format_size(bytes, BINARY),
-            elapsed_ms = started.elapsed().as_millis(),
-            "deleted files"
-        );
-
-        Ok(())
+    if !status.success() {
+        bail!("find -delete failed: {status}");
     }
-    .instrument(info_span!("delete"))
-    .await
+
+    info!(
+        count,
+        reclaimed = %format_size(bytes, BINARY),
+        elapsed_ms = started.elapsed().as_millis(),
+        "deleted files"
+    );
+
+    Ok(())
 }
 
 fn find_args(dir: &Path, days: u32, pattern: &str, delete: bool) -> Vec<String> {
