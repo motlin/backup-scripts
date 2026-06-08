@@ -163,22 +163,22 @@ fn default_apps() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
-    /// Deterministic, self-cleaning fixture root under the OS temp dir. Scoped by
-    /// pid + `tag` so concurrent tests don't collide; removed and recreated fresh.
-    fn fixture_root(tag: &str) -> PathBuf {
-        let base = std::env::temp_dir().join(format!(
-            "backup-clean-electron-{}-{tag}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        base
+    /// Unique, self-cleaning fixture root. `mkdtemp` guarantees a fresh directory
+    /// per call (no pid collisions), and the `TempDir` removes it on drop even if
+    /// the test panics.
+    fn fixture_root(tag: &str) -> TempDir {
+        tempfile::Builder::new()
+            .prefix(&format!("backup-clean-electron-{tag}-"))
+            .tempdir()
+            .unwrap()
     }
 
     #[test]
     fn cache_subdirs_for_returns_only_existing_cache_dirs() {
-        let support = fixture_root("subdirs");
+        let fixture = fixture_root("subdirs");
+        let support = fixture.path();
         let app = support.join("Slack");
         std::fs::create_dir_all(app.join("Cache")).unwrap();
         std::fs::create_dir_all(app.join("GPUCache")).unwrap();
@@ -193,21 +193,19 @@ mod tests {
             vec![app.join("Cache"), app.join("GPUCache")],
             "only existing CACHE_SUBDIRS, never siblings like Local Storage"
         );
-
-        std::fs::remove_dir_all(&support).unwrap();
     }
 
     #[test]
     fn cache_subdirs_for_missing_app_is_empty() {
-        let support = fixture_root("missing-app");
-        let app = support.join("NotInstalled");
+        let fixture = fixture_root("missing-app");
+        let app = fixture.path().join("NotInstalled");
         assert!(cache_subdirs_for(&app).is_empty());
-        std::fs::remove_dir_all(&support).unwrap();
     }
 
     #[test]
     fn find_cache_dirs_only_inspects_allowlisted_apps() {
-        let support = fixture_root("allowlist");
+        let fixture = fixture_root("allowlist");
+        let support = fixture.path();
         // Allowlisted app with caches.
         std::fs::create_dir_all(support.join("Slack").join("Cache")).unwrap();
         std::fs::create_dir_all(support.join("Slack").join("Code Cache")).unwrap();
@@ -216,7 +214,7 @@ mod tests {
         std::fs::create_dir_all(support.join("Evil").join("Cache")).unwrap();
 
         let apps = vec!["Slack".to_string()];
-        let found = find_cache_dirs(&support, &apps);
+        let found = find_cache_dirs(support, &apps);
 
         assert_eq!(
             found,
@@ -226,13 +224,12 @@ mod tests {
             ],
             "Spotify and other non-allowlisted apps are never touched"
         );
-
-        std::fs::remove_dir_all(&support).unwrap();
     }
 
     #[test]
     fn find_cache_dirs_never_selects_sensitive_siblings() {
-        let support = fixture_root("siblings");
+        let fixture = fixture_root("siblings");
+        let support = fixture.path();
         let app = support.join("Superhuman");
         for sensitive in [
             "Local Storage",
@@ -246,11 +243,9 @@ mod tests {
         std::fs::create_dir_all(app.join("Cache")).unwrap();
 
         let apps = vec!["Superhuman".to_string()];
-        let found = find_cache_dirs(&support, &apps);
+        let found = find_cache_dirs(support, &apps);
 
         assert_eq!(found, vec![app.join("Cache")]);
-
-        std::fs::remove_dir_all(&support).unwrap();
     }
 
     #[test]

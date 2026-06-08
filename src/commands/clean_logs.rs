@@ -153,52 +153,51 @@ fn default_cache_dir() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
-    /// Deterministic, self-cleaning fixture root under the OS temp dir.
-    fn fixture_root(tag: &str) -> PathBuf {
-        let base =
-            std::env::temp_dir().join(format!("backup-clean-logs-{}-{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        base
+    /// Unique, self-cleaning fixture root. `mkdtemp` guarantees a fresh directory
+    /// per call and the `TempDir` removes it on drop even if the test panics.
+    fn fixture_root(tag: &str) -> TempDir {
+        tempfile::Builder::new()
+            .prefix(&format!("backup-clean-logs-{tag}-"))
+            .tempdir()
+            .unwrap()
     }
 
     #[test]
     fn find_log_files_collects_nested_files_keeps_dirs() {
-        let root = fixture_root("nested");
+        let fixture = fixture_root("nested");
+        let root = fixture.path();
         std::fs::create_dir_all(root.join("Claude")).unwrap();
         std::fs::write(root.join("Claude/app.log"), b"x").unwrap();
         std::fs::write(root.join("top.log"), b"x").unwrap();
 
-        let found = find_log_files(&root);
+        let found = find_log_files(root);
 
         assert_eq!(
             found,
             vec![root.join("Claude/app.log"), root.join("top.log")],
             "returns regular files at every depth, never the directories themselves"
         );
-
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
     fn find_log_files_skips_diagnostic_reports() {
-        let root = fixture_root("diag");
+        let fixture = fixture_root("diag");
+        let root = fixture.path();
         std::fs::create_dir_all(root.join("DiagnosticReports")).unwrap();
         std::fs::write(root.join("DiagnosticReports/crash.ips"), b"x").unwrap();
         std::fs::create_dir_all(root.join("Sub/DiagnosticReports")).unwrap();
         std::fs::write(root.join("Sub/DiagnosticReports/nested.ips"), b"x").unwrap();
         std::fs::write(root.join("keep.log"), b"x").unwrap();
 
-        let found = find_log_files(&root);
+        let found = find_log_files(root);
 
         assert_eq!(
             found,
             vec![root.join("keep.log")],
             "DiagnosticReports at any depth is excluded; .ips crash reports are kept"
         );
-
-        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

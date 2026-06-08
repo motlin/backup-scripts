@@ -237,8 +237,8 @@ mod tests {
 
     #[tokio::test]
     async fn dry_run_keeps_node_cache_contents() {
-        let tmp = std::env::temp_dir().join(format!("xdg-node-{}", std::process::id()));
-        let node = tmp.join("node");
+        let tmp = tempfile::tempdir().unwrap();
+        let node = tmp.path().join("node");
         std::fs::create_dir_all(node.join("entry")).unwrap();
         std::fs::write(node.join("entry/file.bin"), b"payload").unwrap();
 
@@ -249,14 +249,12 @@ mod tests {
             node.join("entry/file.bin").exists(),
             "dry run must not delete cache contents"
         );
-
-        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[tokio::test]
     async fn real_run_scrubs_node_cache_contents_but_keeps_dir() {
-        let tmp = std::env::temp_dir().join(format!("xdg-node-real-{}", std::process::id()));
-        let node = tmp.join("node");
+        let tmp = tempfile::tempdir().unwrap();
+        let node = tmp.path().join("node");
         std::fs::create_dir_all(node.join("entry")).unwrap();
         std::fs::write(node.join("entry/file.bin"), b"payload").unwrap();
 
@@ -269,14 +267,12 @@ mod tests {
             !node.join("entry").exists(),
             "real run must delete cache contents"
         );
-
-        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[tokio::test]
     async fn node_days_filter_spares_recent_entries() {
-        let tmp = std::env::temp_dir().join(format!("xdg-node-days-{}", std::process::id()));
-        let node = tmp.join("node");
+        let tmp = tempfile::tempdir().unwrap();
+        let node = tmp.path().join("node");
         std::fs::create_dir_all(&node).unwrap();
         std::fs::write(node.join("fresh.bin"), b"payload").unwrap();
 
@@ -287,7 +283,5 @@ mod tests {
             node.join("fresh.bin").exists(),
             "a freshly written entry must survive a large --node-days filter"
         );
-
-        std::fs::remove_dir_all(&tmp).ok();
     }
 }

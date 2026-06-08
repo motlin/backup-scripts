@@ -137,15 +137,16 @@ fn collect_targets(steam_dir: &Path, cache_dirs: &[String]) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
-    /// Deterministic, self-cleaning fixture root under the OS temp dir. Scoped by
-    /// pid + `tag` so concurrent tests don't collide; removed and recreated fresh.
-    fn fixture_root(tag: &str) -> PathBuf {
-        let base =
-            std::env::temp_dir().join(format!("backup-clean-steam-{}-{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        base
+    /// Unique, self-cleaning fixture root. `mkdtemp` guarantees a fresh directory
+    /// per call (no pid collisions), and the `TempDir` removes it on drop even if
+    /// the test panics.
+    fn fixture_root(tag: &str) -> TempDir {
+        tempfile::Builder::new()
+            .prefix(&format!("backup-clean-steam-{tag}-"))
+            .tempdir()
+            .unwrap()
     }
 
     fn default_cache_dirs() -> Vec<String> {
@@ -166,40 +167,38 @@ mod tests {
 
     #[test]
     fn collect_targets_selects_only_existing_cache_dirs() {
-        let steam = fixture_root("targets");
+        let fixture = fixture_root("targets");
+        let steam = fixture.path();
         std::fs::create_dir_all(steam.join("steamapps/shadercache")).unwrap();
         std::fs::create_dir_all(steam.join("appcache")).unwrap();
         // steamapps/downloading absent → not selected.
 
-        let targets = collect_targets(&steam, &default_cache_dirs());
+        let targets = collect_targets(steam, &default_cache_dirs());
 
         assert_eq!(
             targets,
             vec![steam.join("steamapps/shadercache"), steam.join("appcache")],
             "preserves configured order, dropping the missing downloading dir"
         );
-
-        std::fs::remove_dir_all(&steam).unwrap();
     }
 
     #[test]
     fn collect_targets_never_selects_installed_games_or_manifests() {
-        let steam = fixture_root("games");
+        let fixture = fixture_root("games");
+        let steam = fixture.path();
         // The valuable user data that must NEVER be a target.
         std::fs::create_dir_all(steam.join("steamapps/common/Half-Life")).unwrap();
         std::fs::write(steam.join("steamapps/appmanifest_70.acf"), b"x").unwrap();
         // A real cache that should be selected.
         std::fs::create_dir_all(steam.join("steamapps/shadercache")).unwrap();
 
-        let targets = collect_targets(&steam, &default_cache_dirs());
+        let targets = collect_targets(steam, &default_cache_dirs());
 
         assert_eq!(
             targets,
             vec![steam.join("steamapps/shadercache")],
             "installed games and .acf manifests are never eligible"
         );
-
-        std::fs::remove_dir_all(&steam).unwrap();
     }
 
     #[test]

@@ -298,15 +298,16 @@ fn discover_volume_trashes(volumes_dir: &Path, uid: &str) -> Vec<TrashLocation> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
 
-    /// Deterministic, self-cleaning fixture root under the OS temp dir. Scoped by
-    /// pid + `tag` so concurrent tests don't collide; removed and recreated fresh.
-    fn fixture_root(tag: &str) -> PathBuf {
-        let base =
-            std::env::temp_dir().join(format!("backup-clean-trash-{}-{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        base
+    /// Unique, self-cleaning fixture root. `mkdtemp` guarantees a fresh directory
+    /// per call (no pid collisions), and the `TempDir` removes it on drop even if
+    /// the test panics — so a stale leftover can never fail a later run.
+    fn fixture_root(tag: &str) -> TempDir {
+        tempfile::Builder::new()
+            .prefix(&format!("backup-clean-trash-{tag}-"))
+            .tempdir()
+            .unwrap()
     }
 
     #[test]
@@ -320,25 +321,23 @@ mod tests {
     #[test]
     fn discover_volume_trashes_keeps_only_volumes_with_trash() {
         let uid = "501";
-        let vols = fixture_root("discover");
+        let fixture = fixture_root("discover");
+        let vols = fixture.path();
         std::fs::create_dir_all(vols.join("DriveA").join(".Trashes").join(uid)).unwrap();
         std::fs::create_dir_all(vols.join("DriveB")).unwrap(); // mounted, but no trash
         std::fs::write(vols.join("not-a-volume"), b"x").unwrap(); // plain file, ignored
 
-        let found = discover_volume_trashes(&vols, uid);
+        let found = discover_volume_trashes(vols, uid);
 
         assert_eq!(found.len(), 1, "only DriveA has a .Trashes/<uid>");
         assert_eq!(found[0].prefix, "DriveA");
         assert_eq!(found[0].dir, vols.join("DriveA").join(".Trashes").join(uid));
-
-        std::fs::remove_dir_all(&vols).unwrap();
     }
 
     #[test]
     fn discover_volume_trashes_missing_dir_is_empty() {
-        let missing =
-            std::env::temp_dir().join(format!("backup-clean-trash-{}-absent", std::process::id()));
-        let _ = std::fs::remove_dir_all(&missing);
+        let fixture = fixture_root("absent");
+        let missing = fixture.path().join("absent");
         assert!(discover_volume_trashes(&missing, "501").is_empty());
     }
 
@@ -362,16 +361,17 @@ mod tests {
     #[test]
     fn trash_locations_gates_volumes_on_include_flag() {
         let uid = current_uid();
-        let vols = fixture_root("gate-volumes");
+        let fixture = fixture_root("gate-volumes");
+        let vols = fixture.path();
         std::fs::create_dir_all(vols.join("DriveA").join(".Trashes").join(&uid)).unwrap();
 
         // The home trash is independent of the flag, so compare only the
         // volume-sourced (non-empty prefix) locations.
-        let with_volumes: Vec<_> = trash_locations(true, &vols)
+        let with_volumes: Vec<_> = trash_locations(true, vols)
             .into_iter()
             .filter(|loc| !loc.prefix.is_empty())
             .collect();
-        let without_volumes: Vec<_> = trash_locations(false, &vols)
+        let without_volumes: Vec<_> = trash_locations(false, vols)
             .into_iter()
             .filter(|loc| !loc.prefix.is_empty())
             .collect();
@@ -386,20 +386,17 @@ mod tests {
             without_volumes.is_empty(),
             "no volume trashes discovered when include_volumes is false"
         );
-
-        std::fs::remove_dir_all(&vols).unwrap();
     }
 
     #[test]
     fn read_trash_entries_skips_ds_store() {
-        let dir = fixture_root("read-entries");
+        let fixture = fixture_root("read-entries");
+        let dir = fixture.path();
         std::fs::write(dir.join(".DS_Store"), b"x").unwrap();
         std::fs::write(dir.join("keep.txt"), b"y").unwrap();
 
-        let entries = read_trash_entries(&dir).unwrap();
+        let entries = read_trash_entries(dir).unwrap();
 
         assert_eq!(entries, vec![dir.join("keep.txt")]);
-
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
