@@ -88,19 +88,26 @@ pub fn find_dirs_with_marker(root: &Path, marker: &str, max_depth: usize) -> Vec
     results
 }
 
+/// Total apparent size in bytes of `path`: the summed length of every regular
+/// file at or under it (symlinks are counted as the link, not followed). Pure
+/// Rust via `walkdir`, so it spawns no `du` subprocess — keeping every caller
+/// (and its tests) hermetic and portable. The walk runs on a blocking thread so
+/// it never stalls the async runtime. Unreadable entries are skipped rather than
+/// aborting the sum.
 pub async fn dir_size(path: &Path) -> Option<u64> {
-    let output = tokio::process::Command::new("du")
-        .arg("-sk")
-        .arg(path)
-        .output()
-        .await
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = std::str::from_utf8(&output.stdout).ok()?;
-    let kb: u64 = stdout.split_whitespace().next()?.parse().ok()?;
-    Some(kb * 1024)
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        WalkDir::new(&path)
+            .follow_links(false)
+            .into_iter()
+            .flatten()
+            .filter_map(|entry| entry.metadata().ok())
+            .filter(std::fs::Metadata::is_file)
+            .map(|meta| meta.len())
+            .sum()
+    })
+    .await
+    .ok()
 }
 
 pub fn mtime_secs(path: &Path) -> Option<u64> {

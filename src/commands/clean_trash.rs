@@ -19,7 +19,7 @@ pub struct Args {}
 pub async fn run(_args: Args, cfg: &CleanTrashConfig, dry_run: bool) -> Result<CommandSummary> {
     let include_volumes = cfg.include_volumes.unwrap_or(true);
     let volumes_dir = cfg.volumes_dir.clone().unwrap_or_else(default_volumes_dir);
-    let locations = trash_locations(include_volumes, &volumes_dir);
+    let locations = trash_locations(include_volumes, &volumes_dir, &current_uid());
 
     let result = async move {
         if locations.is_empty() {
@@ -216,7 +216,7 @@ fn default_volumes_dir() -> PathBuf {
 /// (when it exists), followed by each discovered per-volume trash under
 /// `volumes_dir` when `include_volumes` is set. Locations that don't exist are
 /// omitted.
-fn trash_locations(include_volumes: bool, volumes_dir: &Path) -> Vec<TrashLocation> {
+fn trash_locations(include_volumes: bool, volumes_dir: &Path, uid: &str) -> Vec<TrashLocation> {
     let mut locations = Vec::new();
     let home = default_trash_dir();
     if home.exists() {
@@ -226,7 +226,7 @@ fn trash_locations(include_volumes: bool, volumes_dir: &Path) -> Vec<TrashLocati
         });
     }
     if include_volumes {
-        locations.extend(discover_volume_trashes(volumes_dir, &current_uid()));
+        locations.extend(discover_volume_trashes(volumes_dir, uid));
     }
     locations
 }
@@ -248,9 +248,9 @@ struct TrashLocation {
     prefix: String,
 }
 
-/// The current user's numeric uid, obtained by shelling out to `id -u` (mirrors
-/// the `du` shell-out in `walk::dir_size`, avoiding a `libc`/`nix` dependency).
-/// Returns an empty string if the command fails.
+/// The current user's numeric uid, obtained by shelling out to `id -u` to avoid
+/// a `libc`/`nix` dependency. Injected into `trash_locations` so tests stay
+/// hermetic. Returns an empty string if the command fails.
 fn current_uid() -> String {
     std::process::Command::new("id")
         .arg("-u")
@@ -360,18 +360,18 @@ mod tests {
 
     #[test]
     fn trash_locations_gates_volumes_on_include_flag() {
-        let uid = current_uid();
+        let uid = "501";
         let fixture = fixture_root("gate-volumes");
         let vols = fixture.path();
-        std::fs::create_dir_all(vols.join("DriveA").join(".Trashes").join(&uid)).unwrap();
+        std::fs::create_dir_all(vols.join("DriveA").join(".Trashes").join(uid)).unwrap();
 
         // The home trash is independent of the flag, so compare only the
         // volume-sourced (non-empty prefix) locations.
-        let with_volumes: Vec<_> = trash_locations(true, vols)
+        let with_volumes: Vec<_> = trash_locations(true, vols, uid)
             .into_iter()
             .filter(|loc| !loc.prefix.is_empty())
             .collect();
-        let without_volumes: Vec<_> = trash_locations(false, vols)
+        let without_volumes: Vec<_> = trash_locations(false, vols, uid)
             .into_iter()
             .filter(|loc| !loc.prefix.is_empty())
             .collect();
