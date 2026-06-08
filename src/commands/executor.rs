@@ -65,7 +65,7 @@ impl CleanProgress {
 
     /// Consume the progress state: finalize the bar, print the results tree,
     /// and fold everything into a `CommandSummary`.
-    fn finish(self, bar_label: &str) -> CommandSummary {
+    fn finish(self) -> CommandSummary {
         let bytes = self.total_bytes.load(Ordering::Relaxed);
         let count = self.total_count.load(Ordering::Relaxed);
         let summary = format!(
@@ -78,7 +78,7 @@ impl CleanProgress {
         let items = self.items.into_inner().unwrap_or_default();
         let items_ok = items.iter().filter(|i| i.ok).count() as u64;
         let items_failed = items.len() as u64 - items_ok;
-        ui::print_tree(&format!("{bar_label}: {summary}"), &items);
+        ui::emit_tree_items(&items);
 
         CommandSummary {
             bytes_freed: bytes,
@@ -131,7 +131,7 @@ where
     while set.join_next().await.is_some() {}
 
     let progress = Arc::try_unwrap(progress).unwrap_or_else(|_| panic!("progress arc leaked"));
-    progress.finish(bar_label)
+    progress.finish()
 }
 
 /// Shared `clean_one` body for commands that delete a whole directory:
@@ -295,7 +295,7 @@ mod tests {
         p.record("a".to_string(), ItemDetail::failure("x"), true, 100);
         p.record("b".to_string(), ItemDetail::failure("x"), true, 200);
         p.record("c".to_string(), ItemDetail::failure("x"), false, 0);
-        let summary = p.finish("test");
+        let summary = p.finish();
         assert_eq!(summary.bytes_freed, 300);
         assert_eq!(summary.items_ok, 2);
         assert_eq!(summary.items_failed, 1);

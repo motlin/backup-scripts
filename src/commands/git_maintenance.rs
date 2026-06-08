@@ -267,7 +267,7 @@ pub async fn run(
         } else {
             bar.finish_err(summary.clone());
         }
-        ui::print_tree(&format!("git-maintenance: {summary}"), &items);
+        ui::emit_tree_items(&items);
 
         Ok(CommandSummary {
             bytes_freed: net,

@@ -3,7 +3,8 @@
 //! There is one process-wide `MultiProgress`. Commands create one `CommandBar` (parent),
 //! call `inc()` / `set_message()` as work progresses, and finish with `finish_ok()` /
 //! `finish_err()` — the bar stays visible at its final position rather than being
-//! removed. After completion, a command may print a static tree summary via `print_tree`.
+//! removed. After completion, a command emits its results as data-only tree events
+//! via `emit_tree_items`; the `TreeLayer` in `logging.rs` owns the connector glyphs.
 //!
 //! Tracing log events are written into scrollback through `emit_line`, which routes every
 //! line through `MultiProgress::println` so the live bar area is repainted cleanly.
@@ -12,6 +13,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::io::{self, IsTerminal};
 use std::sync::OnceLock;
 use std::time::Duration;
+use tracing::info;
 
 static MP: OnceLock<MultiProgress> = OnceLock::new();
 static INTERACTIVE: OnceLock<bool> = OnceLock::new();
@@ -131,26 +133,21 @@ fn done_err_style() -> ProgressStyle {
     ProgressStyle::with_template("{prefix:.bold.red} ✗ {pos}/{len} {msg}").unwrap()
 }
 
-/// Print a tree-shaped summary of `items` under `header`. Labels are padded so the
-/// detail column lines up vertically.
-pub fn print_tree(header: &str, items: &[TreeItem]) {
-    emit_line("");
-    emit_line(header);
+/// Emit each result `item` as a data-only tree event (`info!(target: "tree", ...)`).
+/// Labels are padded so the detail column lines up vertically. No connector glyphs,
+/// header, or blank line are emitted here — the `TreeLayer` in `logging.rs` owns
+/// those, threading these events into the enclosing command span's tree.
+pub fn emit_tree_items(items: &[TreeItem]) {
     let max_label = items
         .iter()
         .map(|i| i.label.chars().count())
         .max()
         .unwrap_or(0);
-    for (i, item) in items.iter().enumerate() {
-        let branch = if i + 1 == items.len() {
-            "└──"
-        } else {
-            "├──"
-        };
+    for item in items {
         let icon = if item.ok { "✓" } else { "✗" };
         let label = pad_right(&item.label, max_label);
         let detail = format_detail(&item.detail);
-        emit_line(&format!("{branch} {icon} {label}  {detail}"));
+        info!(target: "tree", "{icon} {label}  {detail}");
     }
 }
 
@@ -355,6 +352,60 @@ pub struct TreeItem {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::logging::TreeLayer;
+    use std::sync::{Arc, Mutex};
+    use tracing::subscriber::with_default;
+    use tracing_subscriber::Registry;
+    use tracing_subscriber::layer::SubscriberExt;
+
+    /// Capture the lines `emit_tree_items` produces by running it inside a command
+    /// span under a `TreeLayer` whose emit fn appends to a shared buffer.
+    fn capture_tree<F: FnOnce()>(body: F) -> Vec<String> {
+        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        let sink = Arc::clone(&lines);
+        let layer = TreeLayer::new(
+            move |line: &str| sink.lock().unwrap().push(line.to_string()),
+            false,
+        );
+        let subscriber = Registry::default().with(layer);
+        with_default(subscriber, body);
+        Arc::into_inner(lines)
+            .expect("layer dropped its Arc clone after with_default returned")
+            .into_inner()
+            .expect("capture mutex is never poisoned")
+    }
+
+    #[test]
+    fn emit_tree_items_emits_data_only_padded_lines() {
+        let items = vec![
+            TreeItem {
+                label: "short".to_string(),
+                detail: ItemDetail::success("deleted", "4 KiB", "6ms"),
+                ok: true,
+            },
+            TreeItem {
+                label: "a-longer-label".to_string(),
+                detail: ItemDetail::failure("permission denied"),
+                ok: false,
+            },
+        ];
+        let out = capture_tree(|| {
+            let span = tracing::info_span!("clean-x");
+            let _g = span.enter();
+            emit_tree_items(&items);
+        });
+        // The TreeLayer owns the blank line, header, and ├─/└─ connectors; the icons
+        // come from `emit_tree_items` and labels are padded to the widest (14 cols).
+        assert_eq!(
+            out,
+            vec![
+                String::new(),
+                "clean-x".to_string(),
+                format!("├─ ✓ short           {}", format_detail(&items[0].detail)),
+                format!("└─ ✗ a-longer-label  {}", format_detail(&items[1].detail)),
+            ]
+        );
+    }
 
     #[test]
     fn ansi_constants_are_sgr_escapes() {

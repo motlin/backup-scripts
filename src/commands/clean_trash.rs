@@ -99,10 +99,10 @@ pub async fn run(_args: Args, cfg: &CleanTrashConfig, dry_run: bool) -> Result<C
     .instrument(info_span!("clean-trash"))
     .await?;
 
-    if let Some((summary, items, bytes)) = result {
+    if let Some((_summary, items, bytes)) = result {
         let items_ok = items.iter().filter(|i| i.ok).count() as u64;
         let items_failed = items.len() as u64 - items_ok;
-        ui::print_tree(&format!("clean-trash: {summary}"), &items);
+        ui::emit_tree_items(&items);
         Ok(CommandSummary {
             bytes_freed: bytes,
             items_ok,
