@@ -269,6 +269,7 @@ mod tests {
     where
         Fut: std::future::Future,
     {
+        crate::test_support::install_global_tracing_interest();
         let lines = Arc::new(Mutex::new(Vec::<String>::new()));
         let sink = Arc::clone(&lines);
         let layer = TreeLayer::new(
@@ -284,10 +285,15 @@ mod tests {
                 .expect("current-thread runtime builds");
             let _ = rt.block_on(body());
         });
-        Arc::into_inner(lines)
-            .expect("layer dropped its Arc clone after with_default returned")
-            .into_inner()
+        // The future is driven to completion on this thread inside `with_default`,
+        // so the buffer is complete once it returns. Clone it out rather than
+        // reclaiming the Arc: a concurrent test's `rebuild_interest_cache` can
+        // momentarily hold a strong ref to the subscriber (and thus the layer's Arc
+        // clone of this buffer), which makes `Arc::into_inner` flakily return `None`.
+        lines
+            .lock()
             .expect("capture mutex is never poisoned")
+            .clone()
     }
 
     #[test]

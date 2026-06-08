@@ -1,6 +1,8 @@
 mod commands;
 mod config;
 mod logging;
+#[cfg(test)]
+mod test_support;
 mod ui;
 mod walk;
 

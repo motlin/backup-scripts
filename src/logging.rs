@@ -201,6 +201,7 @@ mod tests {
     /// Build a subscriber whose `TreeLayer` captures emitted lines into a shared
     /// buffer, run `body` against it, and return the captured lines.
     fn capture<F: FnOnce()>(color: bool, body: F) -> Vec<String> {
+        crate::test_support::install_global_tracing_interest();
         let lines = Arc::new(Mutex::new(Vec::<String>::new()));
         let sink = Arc::clone(&lines);
         let layer = TreeLayer::new(
@@ -209,10 +210,15 @@ mod tests {
         );
         let subscriber = Registry::default().with(layer);
         with_default(subscriber, body);
-        Arc::into_inner(lines)
-            .expect("layer dropped its Arc clone after with_default returned")
-            .into_inner()
+        // Every event is emitted synchronously on this thread inside `with_default`,
+        // so the buffer is complete once it returns. Clone it out rather than
+        // reclaiming the Arc: a concurrent test's `rebuild_interest_cache` can
+        // momentarily hold a strong ref to the subscriber (and thus the layer's Arc
+        // clone of this buffer), which makes `Arc::into_inner` flakily return `None`.
+        lines
+            .lock()
             .expect("capture mutex is never poisoned")
+            .clone()
     }
 
     /// Shorthand for an owned empty `String` in `vec![...]` expectations.
