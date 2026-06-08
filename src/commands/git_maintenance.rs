@@ -268,6 +268,7 @@ pub async fn run(
             bar.finish_err(summary.clone());
         }
         ui::emit_tree_items(&items);
+        info!(target: "tree", "{summary}");
 
         Ok(CommandSummary {
             bytes_freed: net,
@@ -351,7 +352,6 @@ async fn maintain_one(
     let (ok, detail) = if let Some((step, err)) = failure {
         let suffix = format!("{step}: {err} ({elapsed})");
         let detail = ItemDetail::failure(suffix);
-        warn!("✗ {label}  {}", ui::format_detail(&detail));
         (false, detail)
     } else {
         if size_after < size_before {
