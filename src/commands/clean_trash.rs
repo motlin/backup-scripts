@@ -94,15 +94,16 @@ pub async fn run(_args: Args, cfg: &CleanTrashConfig, dry_run: bool) -> Result<C
         bar.finish_ok(summary.clone());
 
         let items = items.into_inner().unwrap_or_default();
-        Ok::<_, anyhow::Error>(Some((summary, items, measured)))
+        ui::emit_tree_items(&items);
+        info!(target: "tree", "{summary}");
+        Ok::<_, anyhow::Error>(Some((items, measured)))
     }
     .instrument(info_span!("clean-trash"))
     .await?;
 
-    if let Some((_summary, items, bytes)) = result {
+    if let Some((items, bytes)) = result {
         let items_ok = items.iter().filter(|i| i.ok).count() as u64;
         let items_failed = items.len() as u64 - items_ok;
-        ui::emit_tree_items(&items);
         Ok(CommandSummary {
             bytes_freed: bytes,
             items_ok,
