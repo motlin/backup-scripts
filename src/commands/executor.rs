@@ -7,7 +7,7 @@ use std::time::Instant;
 use humansize::{BINARY, format_size};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
-use tracing::{Instrument, warn};
+use tracing::{Instrument, info};
 
 use super::CommandSummary;
 use crate::ui::{self, CommandBar, ItemDetail, TreeItem, format_duration};
@@ -63,8 +63,10 @@ impl CleanProgress {
             .push(TreeItem { label, detail, ok });
     }
 
-    /// Consume the progress state: finalize the bar, print the results tree,
-    /// and fold everything into a `CommandSummary`.
+    /// Consume the progress state: finalize the bar, emit the results tree and a
+    /// closing summary event, and fold everything into a `CommandSummary`. The
+    /// summary event is emitted inside the still-open command span so the
+    /// `TreeLayer` renders it as the `└─` closing branch.
     fn finish(self) -> CommandSummary {
         let bytes = self.total_bytes.load(Ordering::Relaxed);
         let count = self.total_count.load(Ordering::Relaxed);
@@ -79,6 +81,7 @@ impl CleanProgress {
         let items_ok = items.iter().filter(|i| i.ok).count() as u64;
         let items_failed = items.len() as u64 - items_ok;
         ui::emit_tree_items(&items);
+        info!(target: "tree", "{summary}");
 
         CommandSummary {
             bytes_freed: bytes,
@@ -106,6 +109,8 @@ where
     Fut: Future<Output = ()> + Send + 'static,
 {
     if candidates.is_empty() {
+        let verb = if dry_run { "would free" } else { "freed" };
+        info!(target: "tree", "{verb} 0 B across 0 items");
         return CommandSummary::default();
     }
 
@@ -157,7 +162,6 @@ pub async fn delete_dir(dir: &Path, label: String, progress: &CleanProgress) {
         }
         Err(e) => {
             let detail = ItemDetail::failure(format!("{e}"));
-            warn!("✗ {label}  {}", ui::format_detail(&detail));
             progress.record(label, detail, false, 0);
         }
     }
@@ -184,7 +188,6 @@ pub async fn delete_children(dir: &Path, days: u32, label: String, progress: &Cl
         Ok(c) => c,
         Err(e) => {
             let detail = ItemDetail::failure(format!("{e}"));
-            warn!("✗ {label}  {}", ui::format_detail(&detail));
             progress.record(label, detail, false, 0);
             return;
         }
@@ -228,10 +231,6 @@ pub async fn delete_children(dir: &Path, days: u32, label: String, progress: &Cl
         )
     };
 
-    if !all_ok {
-        warn!("✗ {label}  {}", ui::format_detail(&detail));
-    }
-
     progress.record(label, detail, all_ok, freed);
 }
 
@@ -246,14 +245,49 @@ fn read_children(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::sync::Mutex;
     use std::sync::atomic::Ordering;
 
+    use tracing::subscriber::with_default;
+    use tracing_subscriber::Registry;
+    use tracing_subscriber::layer::SubscriberExt;
+
+    use crate::logging::TreeLayer;
     use crate::ui::ItemDetail;
 
     use super::{CleanProgress, run_parallel};
 
     fn progress() -> CleanProgress {
         CleanProgress::new("test", 3, false)
+    }
+
+    /// Drive a `run_parallel` future to completion inside a command span under a
+    /// capturing `TreeLayer`, returning the rendered tree lines. A current-thread
+    /// runtime lets us block on the future while the span is entered, so the
+    /// summary event in `finish()` lands inside the still-open span.
+    fn capture_run_parallel<Fut>(body: impl FnOnce() -> Fut) -> Vec<String>
+    where
+        Fut: std::future::Future,
+    {
+        let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        let sink = Arc::clone(&lines);
+        let layer = TreeLayer::new(
+            move |line: &str| sink.lock().unwrap().push(line.to_string()),
+            false,
+        );
+        let subscriber = Registry::default().with(layer);
+        with_default(subscriber, || {
+            let span = tracing::info_span!("clean-x");
+            let _g = span.enter();
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .expect("current-thread runtime builds");
+            let _ = rt.block_on(body());
+        });
+        Arc::into_inner(lines)
+            .expect("layer dropped its Arc clone after with_default returned")
+            .into_inner()
+            .expect("capture mutex is never poisoned")
     }
 
     #[test]
@@ -329,5 +363,55 @@ mod tests {
         assert_eq!(summary.items_ok, 2);
         assert_eq!(summary.items_failed, 1);
         assert_eq!(summary.items_skipped, 0);
+    }
+
+    #[test]
+    fn run_parallel_emits_item_branches_and_summary() {
+        let out = capture_run_parallel(|| {
+            run_parallel(
+                "test",
+                vec![10_u64, 20],
+                1,
+                false,
+                |bytes, progress: Arc<CleanProgress>| async move {
+                    progress.record(
+                        format!("item-{bytes}"),
+                        ItemDetail::failure("x"),
+                        true,
+                        bytes,
+                    );
+                },
+            )
+        });
+        assert_eq!(out.first().map(String::as_str), Some(""));
+        assert_eq!(out.get(1).map(String::as_str), Some("clean-x"));
+        let branches: Vec<&String> = out.iter().filter(|l| l.starts_with("├─ ✓ ")).collect();
+        assert_eq!(branches.len(), 2);
+        assert_eq!(
+            out.last().map(String::as_str),
+            Some("└─ freed 30 B across 2 items")
+        );
+    }
+
+    #[test]
+    fn run_parallel_empty_candidates_emits_closing_summary() {
+        let out = capture_run_parallel(|| {
+            run_parallel("test", Vec::<u64>::new(), 1, false, |_, _| async {})
+        });
+        assert_eq!(
+            out.last().map(String::as_str),
+            Some("└─ freed 0 B across 0 items")
+        );
+    }
+
+    #[test]
+    fn run_parallel_empty_candidates_dry_run_uses_would_free_verb() {
+        let out = capture_run_parallel(|| {
+            run_parallel("test", Vec::<u64>::new(), 1, true, |_, _| async {})
+        });
+        assert_eq!(
+            out.last().map(String::as_str),
+            Some("└─ would free 0 B across 0 items")
+        );
     }
 }
