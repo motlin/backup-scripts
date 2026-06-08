@@ -88,12 +88,11 @@ pub async fn run(args: Args, cfg: &CleanChromeConfig, dry_run: bool) -> Result<C
         // Chrome holds locks on these caches while open; deleting under it can
         // corrupt the running browser. Unlike a hard error, we skip the step so an
         // open Chrome doesn't fail an otherwise-clean `all` run.
-        if !skip_running_check
-            && let Some(pid) = chrome_running_pid().await
-        {
-            warn!(
-                pid,
-                "Chrome appears to be running; skipping clean-chrome (quit Chrome and re-run `backup clean-chrome`, or pass --skip-running-check / --dry-run)"
+        if !skip_running_check && let Some(pid) = chrome_running_pid().await {
+            warn!(pid, "Chrome appears to be running; skipping clean-chrome");
+            info!(
+                target: "tree",
+                "skipped — quit Chrome and re-run, or pass --skip-running-check / --dry-run"
             );
             return Ok(CommandSummary::skipped_one());
         }

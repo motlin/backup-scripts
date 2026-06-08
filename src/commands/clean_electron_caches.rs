@@ -79,9 +79,11 @@ pub async fn run(
         .or(cfg.concurrency)
         .unwrap_or(DEFAULT_CONCURRENCY);
 
-    warn!("quit each Electron app before cleaning — an open app can corrupt its caches mid-delete");
-
     async move {
+        warn!(
+            "quit each Electron app before cleaning — an open app can corrupt its caches mid-delete"
+        );
+
         if !support_dir.exists() {
             info!(
                 "Application Support dir does not exist, skipping: {}",
