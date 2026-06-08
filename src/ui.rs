@@ -5,14 +5,13 @@
 //! `finish_err()` — the bar stays visible at its final position rather than being
 //! removed. After completion, a command may print a static tree summary via `print_tree`.
 //!
-//! Tracing log events are written into scrollback through `MpWriter`, which routes every
+//! Tracing log events are written into scrollback through `emit_line`, which routes every
 //! line through `MultiProgress::println` so the live bar area is repainted cleanly.
 
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use std::io::{self, IsTerminal};
 use std::sync::OnceLock;
 use std::time::Duration;
-use tracing_subscriber::fmt::MakeWriter;
 
 static MP: OnceLock<MultiProgress> = OnceLock::new();
 static INTERACTIVE: OnceLock<bool> = OnceLock::new();
@@ -45,8 +44,28 @@ pub fn interactive() -> bool {
 
 /// Whether to emit ANSI color escapes. Gated on an interactive TTY and the
 /// absence of the `NO_COLOR` environment variable. Memoized like `interactive`.
-fn use_color() -> bool {
+pub(crate) fn use_color() -> bool {
     *USE_COLOR.get_or_init(|| interactive() && std::env::var_os("NO_COLOR").is_none())
+}
+
+/// Wrap `s` in the WARN color (yellow) when `color` is set, else return it
+/// unchanged. Exposed for the `TreeLayer`, which colors level labels.
+pub(crate) fn warn_label(s: &str, color: bool) -> String {
+    if color {
+        format!("{YELLOW}{s}{RESET}")
+    } else {
+        s.to_string()
+    }
+}
+
+/// Wrap `s` in the ERROR color (red) when `color` is set, else return it
+/// unchanged. Exposed for the `TreeLayer`, which colors level labels.
+pub(crate) fn error_label(s: &str, color: bool) -> String {
+    if color {
+        format!("{RED}{s}{RESET}")
+    } else {
+        s.to_string()
+    }
 }
 
 /// Emit one scrollback line. In a terminal it goes through `MultiProgress` so the
@@ -331,34 +350,6 @@ pub struct TreeItem {
     pub label: String,
     pub detail: ItemDetail,
     pub ok: bool,
-}
-
-/// Writer that pipes tracing-formatted log lines through `MultiProgress::println` so they
-/// land above the live bars cleanly.
-pub struct MpWriter;
-
-impl<'a> MakeWriter<'a> for MpWriter {
-    type Writer = MpHandle;
-    fn make_writer(&'a self) -> Self::Writer {
-        MpHandle
-    }
-}
-
-pub struct MpHandle;
-
-impl io::Write for MpHandle {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let s = std::str::from_utf8(buf).unwrap_or("");
-        for line in s.split('\n') {
-            if !line.is_empty() {
-                emit_line(line);
-            }
-        }
-        Ok(buf.len())
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
 }
 
 #[cfg(test)]
