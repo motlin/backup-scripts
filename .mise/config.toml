@@ -8,3 +8,6 @@ node = "26.2.0"
 "aqua:EmbarkStudios/cargo-deny" = "latest"
 "aqua:taiki-e/cargo-llvm-cov" = "latest"
 release-plz = "latest"
+
+[env]
+TERM = 'xterm-256color'
