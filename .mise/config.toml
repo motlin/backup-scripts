@@ -1,13 +1,13 @@
 [tools]
 just = "1.52.0"
 rust = { version = "stable", components = "clippy,rustfmt,llvm-tools-preview" }
-pre-commit = "latest"
+pre-commit = "4.6.0"
 node = "26.2.0"
-"npm:markdownlint-cli2" = "latest"
-"aqua:nextest-rs/nextest/cargo-nextest" = "latest"
-"aqua:EmbarkStudios/cargo-deny" = "latest"
-"aqua:taiki-e/cargo-llvm-cov" = "latest"
-release-plz = "latest"
+"npm:markdownlint-cli2" = "0.22.1"
+"aqua:nextest-rs/nextest/cargo-nextest" = "0.9.137"
+"aqua:EmbarkStudios/cargo-deny" = "0.19.9"
+"aqua:taiki-e/cargo-llvm-cov" = "0.8.7"
+release-plz = "0.3.159"
 
 [env]
 TERM = 'xterm-256color'
