@@ -112,7 +112,7 @@ jobs:
                       target
                   key: cargo-${{ hashFiles('Cargo.lock') }}
             - run: just coverage
-            - uses: codecov/codecov-action@v5
+            - uses: codecov/codecov-action@v7
               with:
                   files: lcov.info
                   fail_ci_if_error: false
