@@ -43,7 +43,7 @@ pub async fn run(args: Args, cfg: &CleanDockerConfig, dry_run: bool) -> Result<C
         }
 
         if dry_run {
-            run_df().await
+            run_df(hours).await
         } else {
             run_prune(hours).await
         }
@@ -66,7 +66,8 @@ async fn docker_available() -> bool {
     matches!(output, Ok(out) if out.status.success())
 }
 
-async fn run_df() -> Result<CommandSummary> {
+/// Reports Docker's reclaimable total, including objects excluded by prune filters.
+async fn run_df(hours: u32) -> Result<CommandSummary> {
     let started = Instant::now();
     let output = Command::new("docker")
         .arg("system")
@@ -91,10 +92,14 @@ async fn run_df() -> Result<CommandSummary> {
         info!("{line}");
     }
 
+    warn!(
+        hours,
+        "estimate includes all ages and volumes; prune excludes recent objects and volumes"
+    );
     info!(
         reclaimable = %reclaimable.map_or_else(|| "unknown".to_string(), |b| format_size(b, BINARY)),
         elapsed_ms = started.elapsed().as_millis(),
-        "dry run: would prune objects shown above"
+        "dry run: upper-bound estimate"
     );
     Ok(CommandSummary::ok_one_with_bytes(reclaimable.unwrap_or(0)))
 }
