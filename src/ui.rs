@@ -47,7 +47,12 @@ pub fn interactive() -> bool {
 /// Whether to emit ANSI color escapes. Gated on an interactive TTY and the
 /// absence of the `NO_COLOR` environment variable. Memoized like `interactive`.
 pub(crate) fn use_color() -> bool {
-    *USE_COLOR.get_or_init(|| interactive() && std::env::var_os("NO_COLOR").is_none())
+    *USE_COLOR
+        .get_or_init(|| color_is_enabled(interactive(), std::env::var_os("NO_COLOR").is_some()))
+}
+
+fn color_is_enabled(interactive: bool, no_color_is_set: bool) -> bool {
+    interactive && !no_color_is_set
 }
 
 /// Wrap `s` in the WARN color (yellow) when `color` is set, else return it
@@ -418,11 +423,16 @@ mod tests {
     }
 
     #[test]
-    fn use_color_is_disabled_without_a_tty() {
-        // The test harness runs without an interactive stderr, so color gating
-        // is off regardless of NO_COLOR. Guards the `interactive()` precondition.
-        assert!(!interactive());
-        assert!(!use_color());
+    fn color_is_enabled_requires_an_interactive_terminal_without_no_color() {
+        assert_eq!(
+            [
+                color_is_enabled(false, false),
+                color_is_enabled(false, true),
+                color_is_enabled(true, false),
+                color_is_enabled(true, true),
+            ],
+            [false, false, true, false]
+        );
     }
 
     #[test]
