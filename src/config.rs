@@ -37,6 +37,7 @@ pub struct AppConfig {
     pub clean_mise: CleanMiseConfig,
     pub clean_xdg_cache: CleanXdgCacheConfig,
     pub clean_rustup: CleanRustupConfig,
+    pub dedupe_media: DedupeMediaConfig,
     pub bz_cleanup: BzCleanupConfig,
     pub all: AllConfig,
 }
@@ -299,6 +300,13 @@ pub struct CleanRustupConfig {
     /// Actually uninstall removable toolchains. When false (default) the command
     /// only previews. The active/default/overridden toolchains are always kept.
     pub remove: Option<bool>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct DedupeMediaConfig {
+    pub pictures_dir: Option<PathBuf>,
+    pub yt_dlp_dirs: Option<Vec<PathBuf>>,
 }
 
 #[derive(Debug, Default, Deserialize)]

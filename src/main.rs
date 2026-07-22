@@ -149,6 +149,10 @@ enum Command {
     /// `rustup toolchain uninstall` (never a raw `rm`). Preview-only unless
     /// `--remove` (or `clean_rustup.remove = true`) is set.
     CleanRustup(commands::clean_rustup::Args),
+
+    /// Hard-link duplicate media across organized `iMessage` and complete
+    /// `yt-dlp` directory trees. This command is not part of `backup all`.
+    DedupeMedia(commands::dedupe_media::Args),
 }
 
 // A flat `match` over every subcommand; each arm is a couple of lines. The length
@@ -303,6 +307,11 @@ async fn main() -> Result<()> {
         }
         Command::CleanRustup(args) => {
             commands::clean_rustup::run(args, &cfg.clean_rustup, cli.dry_run)
+                .await
+                .map(drop)
+        }
+        Command::DedupeMedia(args) => {
+            commands::dedupe_media::run(args, &cfg.dedupe_media, cli.dry_run)
                 .await
                 .map(drop)
         }
