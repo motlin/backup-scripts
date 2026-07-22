@@ -156,6 +156,14 @@ pub struct CleanDockerConfig {
     pub hours: Option<u32>,
     /// Prune scope. Currently only "system" is supported.
     pub scope: Option<String>,
+    /// Remove all unused images, including tagged images. Default: true.
+    pub all_images: Option<bool>,
+    /// Remove all unused volumes regardless of age. Default: false.
+    pub volumes: Option<bool>,
+    /// Run Docker Desktop's reclaim helper when automatic reclamation stalls. Default: true.
+    pub reclaim_physical: Option<bool>,
+    /// Docker Desktop sparse disk image used for physical allocation measurements.
+    pub disk_image: Option<PathBuf>,
 }
 
 #[derive(Debug, Default, Deserialize)]

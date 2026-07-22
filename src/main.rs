@@ -54,7 +54,8 @@ enum Command {
     /// Delete stale per-project Xcode `DerivedData` directories.
     CleanXcode(commands::clean_xcode::Args),
 
-    /// Prune unused Docker images, containers, volumes, build cache, and networks.
+    /// Prune unused Docker images, containers, build cache, and networks. Volume cleanup
+    /// is opt-in. Measures and, when necessary, triggers Docker.raw physical reclamation.
     CleanDocker(commands::clean_docker::Args),
 
     /// Run `brew cleanup` to remove old formula/cask versions and prune the download cache.
