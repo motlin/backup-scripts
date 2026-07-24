@@ -18,9 +18,9 @@ pub struct Args {}
 ///     Preferred over `mise cache clear`, since <http:/npm>: backends symlink
 ///     installs into the cache (jdx/mise#7267) and a blanket clear would break
 ///     them.
-///   * `mise prune` — removes tool VERSIONS no longer referenced by any tracked
-///     config. Versions pinned by a config (incl. this repo's `.mise/config.toml`)
-///     are kept.
+///   * `mise prune` — removes dead tracked-config links and tool VERSIONS no
+///     longer referenced by any remaining config. Versions pinned by a config
+///     (incl. this repo's `.mise/config.toml`) are kept.
 ///
 /// We never touch `~/.local/share/mise/installs` directly.
 pub async fn run(_args: Args, _cfg: &CleanMiseConfig, dry_run: bool) -> Result<CommandSummary> {
@@ -87,13 +87,13 @@ async fn run_cache_prune(dry_run: bool) -> Result<CommandSummary> {
     Ok(CommandSummary::ok_one())
 }
 
-/// `mise prune` — removes unused tool versions. Returns the run summary plus the
-/// number of versions pruned (so the caller can report it without conflating it
-/// with the cache-prune pass). Bytes freed are not reported by mise, so the
-/// summary carries item counts only.
+/// `mise prune` — removes dead tracked-config links and unused tool versions.
+/// Returns the run summary plus the number of versions pruned (so the caller can
+/// report it without conflating it with the cache-prune pass). Bytes freed are
+/// not reported by mise, so the summary carries item counts only.
 async fn run_prune(dry_run: bool) -> Result<(CommandSummary, u64)> {
     let mut cmd = Command::new("mise");
-    cmd.arg("prune").arg("--tools");
+    cmd.arg("prune");
     if dry_run {
         cmd.arg("--dry-run");
     }

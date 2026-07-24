@@ -132,9 +132,10 @@ enum Command {
     CleanNodeGyp(commands::clean_node_gyp::Args),
 
     /// Reclaim mise disk usage without removing in-use tools: `mise cache prune`
-    /// (age-based cache GC) plus `mise prune` (removes tool versions no longer
-    /// referenced by any tracked config). Versions pinned by a config are kept;
-    /// `~/.local/share/mise/installs` is never touched directly.
+    /// (age-based cache GC) plus `mise prune` (removes dead tracked-config links
+    /// and tool versions no longer referenced by any remaining config). Versions
+    /// pinned by a config are kept; `~/.local/share/mise/installs` is never
+    /// touched directly.
     CleanMise(commands::clean_mise::Args),
 
     /// Reclaim disk under the XDG cache (`~/.cache`) via first-party subcommands:
