@@ -33,13 +33,13 @@ enum Command {
     /// on every discovered git repo. Includes objects from alternates.
     GitMaintenance(commands::git_maintenance::Args),
 
-    /// Delete stale Maven target/ directories.
+    /// Delete stale, Git-ignored Maven target/ directories.
     CleanMaven(commands::clean_maven::Args),
 
-    /// Delete stale `node_modules`/ directories.
+    /// Delete stale, Git-ignored `node_modules`/ directories.
     CleanNode(commands::clean_node::Args),
 
-    /// Delete stale Cargo target/ directories.
+    /// Delete stale, Git-ignored Cargo target/ directories.
     CleanCargo(commands::clean_cargo::Args),
 
     /// Delete stale version directories from the local Maven repository (~/.m2/repository).

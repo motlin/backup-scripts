@@ -21,7 +21,7 @@ pub struct Args {
     #[arg(long)]
     pub depth: Option<usize>,
 
-    /// Only clean `node_modules`/ dirs older than this many days. 0 = always clean. [config: `clean_node.days`, default: 14]
+    /// Only clean Git-ignored `node_modules`/ dirs older than this many days. 0 = always clean. [config: `clean_node.days`, default: 14]
     #[arg(long)]
     pub days: Option<u32>,
 

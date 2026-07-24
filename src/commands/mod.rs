@@ -7,7 +7,7 @@
 /// Commands that were skipped (tool not installed, dir missing) record
 /// `items_skipped = 1` via `CommandSummary::skipped_one()` so the skip is
 /// reported distinctly rather than masquerading as a no-op success.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct CommandSummary {
     pub bytes_freed: u64,
     pub items_ok: u64,

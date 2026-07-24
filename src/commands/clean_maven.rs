@@ -21,7 +21,7 @@ pub struct Args {
     #[arg(long)]
     pub depth: Option<usize>,
 
-    /// Only clean target/ dirs older than this many days. 0 = always clean. [config: `clean_maven.days`, default: 14]
+    /// Only clean Git-ignored target/ dirs older than this many days. 0 = always clean. [config: `clean_maven.days`, default: 14]
     #[arg(long)]
     pub days: Option<u32>,
 
