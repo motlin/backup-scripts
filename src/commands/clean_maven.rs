@@ -8,7 +8,7 @@ use crate::config::{CleanMavenConfig, resolve_roots};
 use super::{CommandSummary, cleaner};
 
 pub const DEFAULT_DEPTH: usize = 4;
-pub const DEFAULT_DAYS: u32 = 14;
+pub const DEFAULT_DAYS: u32 = 7;
 pub const DEFAULT_CONCURRENCY: usize = 4;
 
 #[derive(ClapArgs, Debug, Default)]
@@ -21,7 +21,7 @@ pub struct Args {
     #[arg(long)]
     pub depth: Option<usize>,
 
-    /// Only clean Git-ignored target/ dirs older than this many days. 0 = always clean. [config: `clean_maven.days`, default: 14]
+    /// Only clean Git-ignored target/ dirs older than this many days. 0 = always clean. [config: `clean_maven.days`, default: 7]
     #[arg(long)]
     pub days: Option<u32>,
 
