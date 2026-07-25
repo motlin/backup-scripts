@@ -8,6 +8,7 @@ pub struct AppConfig {
     pub roots: Option<Vec<PathBuf>>,
     pub walk: WalkConfig,
     pub logging: LoggingConfig,
+    pub backblaze_exclusions: BackblazeExclusionsConfig,
     pub git_maintenance: GitMaintenanceConfig,
     pub clean_maven: CleanMavenConfig,
     pub clean_node: CleanNodeConfig,
@@ -43,6 +44,14 @@ pub struct AppConfig {
     pub dedupe_media: DedupeMediaConfig,
     pub bz_cleanup: BzCleanupConfig,
     pub all: AllConfig,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct BackblazeExclusionsConfig {
+    pub file: Option<PathBuf>,
+    /// Apply managed exclusion changes. Default false.
+    pub apply: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize)]

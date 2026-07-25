@@ -10,15 +10,16 @@ use crate::ui;
 use crate::ui::format_duration;
 
 use super::{
-    CommandSummary, bz_cleanup, clean_brew, clean_cargo, clean_chrome, clean_cocoapods,
-    clean_cypress, clean_docker, clean_electron_caches, clean_gems, clean_go_build,
-    clean_go_mod_cache, clean_gradle, clean_jetbrains, clean_library_caches, clean_logs, clean_m2,
-    clean_maven, clean_mise, clean_node, clean_node_gyp, clean_npm, clean_pip, clean_playwright,
-    clean_pnpm, clean_python_artifacts, clean_rustup, clean_steam, clean_tmp, clean_trash,
-    clean_xcode, clean_xdg_cache, clean_yarn, git_maintenance,
+    CommandSummary, backblaze_exclusions, bz_cleanup, clean_brew, clean_cargo, clean_chrome,
+    clean_cocoapods, clean_cypress, clean_docker, clean_electron_caches, clean_gems,
+    clean_go_build, clean_go_mod_cache, clean_gradle, clean_jetbrains, clean_library_caches,
+    clean_logs, clean_m2, clean_maven, clean_mise, clean_node, clean_node_gyp, clean_npm,
+    clean_pip, clean_playwright, clean_pnpm, clean_python_artifacts, clean_rustup, clean_steam,
+    clean_tmp, clean_trash, clean_xcode, clean_xdg_cache, clean_yarn, git_maintenance,
 };
 
 pub const DEFAULT_STEPS: &[&str] = &[
+    "backblaze-exclusions",
     "git-maintenance",
     "clean-maven",
     "clean-node",
@@ -168,6 +169,14 @@ async fn run_steps(
 #[allow(clippy::too_many_lines)]
 async fn run_step(step: &str, config: &AppConfig, dry_run: bool) -> Result<CommandSummary> {
     let summary = match step {
+        "backblaze-exclusions" => {
+            backblaze_exclusions::run(
+                backblaze_exclusions::Args::default(),
+                &config.backblaze_exclusions,
+                dry_run,
+            )
+            .await?
+        }
         "git-maintenance" => {
             git_maintenance::run(
                 git_maintenance::Args::default(),

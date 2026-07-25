@@ -25,6 +25,10 @@ enum Command {
     /// Run all configured maintenance steps in `all.steps` order.
     All(commands::all::Args),
 
+    /// Manage a safe, idempotent block of Backblaze exclusions for regenerable
+    /// development data. Preview-only unless `--apply` is set.
+    BackblazeExclusions(commands::backblaze_exclusions::Args),
+
     /// Delete old Backblaze `bz_done`_*.dat files to reclaim disk space.
     BzCleanup(commands::bz_cleanup::Args),
 
@@ -191,6 +195,11 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Command::All(args) => commands::all::run(args, &cfg, cli.dry_run).await,
+        Command::BackblazeExclusions(args) => {
+            commands::backblaze_exclusions::run(args, &cfg.backblaze_exclusions, cli.dry_run)
+                .await
+                .map(drop)
+        }
         Command::BzCleanup(args) => commands::bz_cleanup::run(args, &cfg.bz_cleanup, cli.dry_run)
             .await
             .map(drop),

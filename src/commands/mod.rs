@@ -116,6 +116,7 @@ mod tests {
 }
 
 pub mod all;
+pub mod backblaze_exclusions;
 pub mod bz_cleanup;
 pub mod clean_brew;
 pub mod clean_cargo;
