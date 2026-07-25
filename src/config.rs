@@ -26,6 +26,7 @@ pub struct AppConfig {
     pub clean_cocoapods: CleanCocoaPodsConfig,
     pub clean_go_build: CleanGoBuildConfig,
     pub clean_go_mod_cache: CleanGoModCacheConfig,
+    pub clean_python_artifacts: CleanPythonArtifactsConfig,
     pub clean_jetbrains: CleanJetBrainsConfig,
     pub clean_logs: CleanLogsConfig,
     pub clean_library_caches: CleanLibraryCachesConfig,
@@ -219,6 +220,17 @@ pub struct CleanGoModCacheConfig {
     pub remove: Option<bool>,
     /// Minimum cache size in GiB before it is eligible. Default 5.
     pub minimum_gibibytes: Option<u64>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanPythonArtifactsConfig {
+    pub roots: Option<Vec<PathBuf>>,
+    pub depth: Option<usize>,
+    pub days: Option<u32>,
+    pub concurrency: Option<usize>,
+    /// Delete eligible virtual environments instead of reporting them. Default false.
+    pub remove_virtualenvs: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize)]

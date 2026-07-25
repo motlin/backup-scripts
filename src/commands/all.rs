@@ -14,8 +14,8 @@ use super::{
     clean_cypress, clean_docker, clean_electron_caches, clean_go_build, clean_go_mod_cache,
     clean_gradle, clean_jetbrains, clean_library_caches, clean_logs, clean_m2, clean_maven,
     clean_mise, clean_node, clean_node_gyp, clean_npm, clean_pip, clean_playwright, clean_pnpm,
-    clean_rustup, clean_steam, clean_tmp, clean_trash, clean_xcode, clean_xdg_cache, clean_yarn,
-    git_maintenance,
+    clean_python_artifacts, clean_rustup, clean_steam, clean_tmp, clean_trash, clean_xcode,
+    clean_xdg_cache, clean_yarn, git_maintenance,
 };
 
 pub const DEFAULT_STEPS: &[&str] = &[
@@ -36,6 +36,7 @@ pub const DEFAULT_STEPS: &[&str] = &[
     "clean-cocoapods",
     "clean-go-build",
     "clean-go-mod-cache",
+    "clean-python-artifacts",
     "clean-jetbrains",
     "clean-logs",
     "clean-library-caches",
@@ -253,6 +254,15 @@ async fn run_step(step: &str, config: &AppConfig, dry_run: bool) -> Result<Comma
             clean_go_mod_cache::run(
                 clean_go_mod_cache::Args::default(),
                 &config.clean_go_mod_cache,
+                dry_run,
+            )
+            .await?
+        }
+        "clean-python-artifacts" => {
+            clean_python_artifacts::run(
+                clean_python_artifacts::Args::default(),
+                &config.clean_python_artifacts,
+                config.roots.as_ref(),
                 dry_run,
             )
             .await?

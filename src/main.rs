@@ -87,6 +87,10 @@ enum Command {
     /// configured size. Preview-only unless `--remove` is set.
     CleanGoModCache(commands::clean_go_mod_cache::Args),
 
+    /// Delete stale, Git-ignored Python bytecode directories and optionally
+    /// delete stale, Git-ignored `.venv` directories.
+    CleanPythonArtifacts(commands::clean_python_artifacts::Args),
+
     /// Delete stale per-product `JetBrains` IDE caches (~/Library/Caches/JetBrains/*).
     /// Skips the `Toolbox` subdir (installed IDE binaries, not a cache). Close
     /// the relevant IDEs before running to avoid index corruption.
@@ -265,6 +269,14 @@ async fn main() -> Result<()> {
                 .await
                 .map(drop)
         }
+        Command::CleanPythonArtifacts(args) => commands::clean_python_artifacts::run(
+            args,
+            &cfg.clean_python_artifacts,
+            cfg.roots.as_ref(),
+            cli.dry_run,
+        )
+        .await
+        .map(drop),
         Command::CleanJetbrains(args) => {
             commands::clean_jetbrains::run(args, &cfg.clean_jetbrains, cli.dry_run)
                 .await

@@ -139,6 +139,7 @@ pub mod clean_npm;
 pub mod clean_pip;
 pub mod clean_playwright;
 pub mod clean_pnpm;
+pub mod clean_python_artifacts;
 pub mod clean_rustup;
 pub mod clean_steam;
 pub mod clean_tmp;

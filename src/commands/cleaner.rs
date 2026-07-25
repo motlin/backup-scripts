@@ -89,11 +89,23 @@ pub async fn clean(config: Config) -> Result<CommandSummary> {
 /// the directory untouched.
 async fn git_allows_deletion(project: &Path, junk: &str) -> Result<bool> {
     let artifact = project.join(junk);
+    git_allows_path_deletion(&artifact).await
+}
+
+/// Require Git to identify an artifact directory as ignored and verify that it
+/// contains no tracked files. Paths outside a worktree are rejected.
+pub(crate) async fn git_allows_path_deletion(artifact: &Path) -> Result<bool> {
+    let parent = artifact
+        .parent()
+        .with_context(|| format!("artifact has no parent: {}", artifact.display()))?;
+    let name = artifact
+        .file_name()
+        .with_context(|| format!("artifact has no file name: {}", artifact.display()))?;
     let ignored = Command::new("git")
         .arg("-C")
-        .arg(project)
+        .arg(parent)
         .args(["check-ignore", "--quiet", "--"])
-        .arg(junk)
+        .arg(name)
         .output()
         .await
         .with_context(|| format!("invoking `git check-ignore` for {}", artifact.display()))?;
@@ -111,9 +123,9 @@ async fn git_allows_deletion(project: &Path, junk: &str) -> Result<bool> {
 
     let tracked = Command::new("git")
         .arg("-C")
-        .arg(project)
+        .arg(parent)
         .args(["ls-files", "--cached", "--"])
-        .arg(junk)
+        .arg(name)
         .output()
         .await
         .with_context(|| format!("invoking `git ls-files` for {}", artifact.display()))?;
