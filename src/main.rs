@@ -83,6 +83,10 @@ enum Command {
     /// Run `go clean -cache` to clear the Go build cache.
     CleanGoBuild(commands::clean_go_build::Args),
 
+    /// Clear the Go module cache with `go clean -modcache` when it exceeds a
+    /// configured size. Preview-only unless `--remove` is set.
+    CleanGoModCache(commands::clean_go_mod_cache::Args),
+
     /// Delete stale per-product `JetBrains` IDE caches (~/Library/Caches/JetBrains/*).
     /// Skips the `Toolbox` subdir (installed IDE binaries, not a cache). Close
     /// the relevant IDEs before running to avoid index corruption.
@@ -253,6 +257,11 @@ async fn main() -> Result<()> {
         }
         Command::CleanGoBuild(args) => {
             commands::clean_go_build::run(args, &cfg.clean_go_build, cli.dry_run)
+                .await
+                .map(drop)
+        }
+        Command::CleanGoModCache(args) => {
+            commands::clean_go_mod_cache::run(args, &cfg.clean_go_mod_cache, cli.dry_run)
                 .await
                 .map(drop)
         }

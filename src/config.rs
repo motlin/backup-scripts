@@ -25,6 +25,7 @@ pub struct AppConfig {
     pub clean_pip: CleanPipConfig,
     pub clean_cocoapods: CleanCocoaPodsConfig,
     pub clean_go_build: CleanGoBuildConfig,
+    pub clean_go_mod_cache: CleanGoModCacheConfig,
     pub clean_jetbrains: CleanJetBrainsConfig,
     pub clean_logs: CleanLogsConfig,
     pub clean_library_caches: CleanLibraryCachesConfig,
@@ -210,6 +211,15 @@ pub struct CleanCocoaPodsConfig {}
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CleanGoBuildConfig {}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanGoModCacheConfig {
+    /// Actually clear the module cache. Default false.
+    pub remove: Option<bool>,
+    /// Minimum cache size in GiB before it is eligible. Default 5.
+    pub minimum_gibibytes: Option<u64>,
+}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
