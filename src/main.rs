@@ -91,6 +91,10 @@ enum Command {
     /// delete stale, Git-ignored `.venv` directories.
     CleanPythonArtifacts(commands::clean_python_artifacts::Args),
 
+    /// Remove obsolete user-installed gem versions through `gem cleanup`.
+    /// Preview-only unless `--remove` is set.
+    CleanGems(commands::clean_gems::Args),
+
     /// Delete stale per-product `JetBrains` IDE caches (~/Library/Caches/JetBrains/*).
     /// Skips the `Toolbox` subdir (installed IDE binaries, not a cache). Close
     /// the relevant IDEs before running to avoid index corruption.
@@ -277,6 +281,9 @@ async fn main() -> Result<()> {
         )
         .await
         .map(drop),
+        Command::CleanGems(args) => commands::clean_gems::run(args, &cfg.clean_gems, cli.dry_run)
+            .await
+            .map(drop),
         Command::CleanJetbrains(args) => {
             commands::clean_jetbrains::run(args, &cfg.clean_jetbrains, cli.dry_run)
                 .await

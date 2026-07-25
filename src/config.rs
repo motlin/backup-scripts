@@ -24,6 +24,7 @@ pub struct AppConfig {
     pub clean_pnpm: CleanPnpmConfig,
     pub clean_pip: CleanPipConfig,
     pub clean_cocoapods: CleanCocoaPodsConfig,
+    pub clean_gems: CleanGemsConfig,
     pub clean_go_build: CleanGoBuildConfig,
     pub clean_go_mod_cache: CleanGoModCacheConfig,
     pub clean_python_artifacts: CleanPythonArtifactsConfig,
@@ -208,6 +209,13 @@ pub struct CleanPipConfig {}
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CleanCocoaPodsConfig {}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CleanGemsConfig {
+    /// Actually remove obsolete user-installed gem versions. Default false.
+    pub remove: Option<bool>,
+}
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
