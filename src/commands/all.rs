@@ -316,7 +316,13 @@ async fn run_step(step: &str, config: &AppConfig, dry_run: bool) -> Result<Comma
             .await?
         }
         "clean-rustup" => {
-            clean_rustup::run(clean_rustup::Args::default(), &config.clean_rustup, dry_run).await?
+            clean_rustup::run(
+                clean_rustup::Args::default(),
+                &config.clean_rustup,
+                config.roots.as_ref(),
+                dry_run,
+            )
+            .await?
         }
         "bz-cleanup" => {
             bz_cleanup::run(bz_cleanup::Args::default(), &config.bz_cleanup, dry_run).await?

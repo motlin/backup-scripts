@@ -308,7 +308,7 @@ async fn main() -> Result<()> {
                 .map(drop)
         }
         Command::CleanRustup(args) => {
-            commands::clean_rustup::run(args, &cfg.clean_rustup, cli.dry_run)
+            commands::clean_rustup::run(args, &cfg.clean_rustup, cfg.roots.as_ref(), cli.dry_run)
                 .await
                 .map(drop)
         }

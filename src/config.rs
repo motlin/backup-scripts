@@ -305,8 +305,10 @@ pub struct CleanXdgCacheConfig {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CleanRustupConfig {
+    pub roots: Option<Vec<PathBuf>>,
+    pub depth: Option<usize>,
     /// Actually uninstall removable toolchains. When false (default) the command
-    /// only previews. The active/default/overridden toolchains are always kept.
+    /// only previews. Referenced, active, default, and overridden toolchains are kept.
     pub remove: Option<bool>,
 }
 
