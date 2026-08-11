@@ -1,11 +1,12 @@
 [tools]
-just = "1.56.0"
+just = "1.57.0"
 rust = { version = "1.97.1", components = "clippy,rustfmt,llvm-tools" }
-pre-commit = "4.6.0"
-node = "26.2.0"
-"npm:markdownlint-cli2" = "0.22.1"
-"aqua:nextest-rs/nextest/cargo-nextest" = "0.9.137"
-"aqua:EmbarkStudios/cargo-deny" = "0.19.9"
+pre-commit = "4.6.1"
+node = "26.5.0"
+"npm:markdownlint-cli2" = "0.23.1"
+"npm:vite-plus" = "0.2.5"
+"aqua:nextest-rs/nextest/cargo-nextest" = "0.9.140"
+"aqua:EmbarkStudios/cargo-deny" = "0.20.2"
 "aqua:taiki-e/cargo-llvm-cov" = "0.8.7"
 release-plz = "0.3.159"
 
