@@ -8,7 +8,6 @@ node = "26.5.0"
 "aqua:nextest-rs/nextest/cargo-nextest" = "0.9.140"
 "aqua:EmbarkStudios/cargo-deny" = "0.20.2"
 "aqua:taiki-e/cargo-llvm-cov" = "0.8.7"
-release-plz = "0.3.159"
 
 [env]
 TERM = 'xterm-256color'
