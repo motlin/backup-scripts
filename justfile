@@ -23,7 +23,7 @@ install:
 @clean: _clean-git
 
 # `just check` then run all pre-commit hooks
-precommit: check
+verify: check
     pre-commit run --all-files
     @echo "All pre-commit checks passed!"
 

@@ -9,7 +9,7 @@ Toolchain versions are pinned in `.mise/config.toml`. Run `mise install` (or `ju
 Use `just` recipes — they wrap the underlying commands so local and CI invocations stay in sync.
 
 - `just check` — build, test, clippy, fmt
-- `just precommit` — `just check` plus `pre-commit run --all-files`
+- `just verify` — `just check` plus `pre-commit run --all-files`
 
 ## Pre-commit
 
