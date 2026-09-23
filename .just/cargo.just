@@ -37,9 +37,9 @@ coverage:
 # cargo run --release -- {{ARGS}}
 [group('run')]
 run *ARGS:
-    cargo run --release -- {{ARGS}}
+    cargo run --release -- {{ ARGS }}
 
 # release-plz (dry-run by default; pass `release-plz release` to publish)
 [group('release')]
 release *ARGS="--help":
-    release-plz {{ARGS}}
+    release-plz {{ ARGS }}
