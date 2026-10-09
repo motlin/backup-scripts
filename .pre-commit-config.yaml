@@ -5,7 +5,7 @@ repos:
           - id: check-yaml
             args: ['--allow-multiple-documents']
           - id: check-json
-            exclude: "biome\\.jsonc|tsconfig.*\\.json|markdownlint.*\\.jsonc|markdownlint-cli2.*\\.jsonc"
+            exclude: "tsconfig.*\\.json"
           - id: check-toml
           - id: check-xml
           - id: end-of-file-fixer
