@@ -40,6 +40,12 @@ repos:
             language: system
             types: [rust]
             pass_filenames: false
+          - id: oxfmt
+            name: oxfmt-next-line
+            entry: oxfmt-next-line --no-error-on-unmatched-pattern
+            language: system
+            # Show "Finished in Xms on N files" so every run proves formatting happened.
+            verbose: true
           - id: markdownlint-cli2
             name: markdownlint-cli2
             entry: markdownlint-cli2
